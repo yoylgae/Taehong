@@ -98,5 +98,5 @@ button.go:hover{background:#1d4ed8}
   document.getElementById('eye').onclick=()=>{pw.type=pw.type==='password'?'text':'password';pw.focus();};
 </script>
 </body></html>`;
-  return new Response(html, { status: 401, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
+  return new Response(html, { status: 200, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
 }
