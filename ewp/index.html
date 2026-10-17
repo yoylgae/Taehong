@@ -1,0 +1,400 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>건설장비 작업계획서</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<main id="app"><p class="muted">불러오는 중…</p></main>
+
+<template id="tpl-list">
+  <div class="page-title">건설장비 작업계획서 목록</div>
+  <div class="subtabs"><button type="button" class="active" data-sub="plan">작업계획서</button><button type="button" data-sub="chk">일일점검표</button></div>
+  <div class="sub" data-sub="plan">
+  <div class="srch-bar right"><button type="button" class="btn gray" id="btn-search">조회</button></div>
+  <form class="srch" id="srch" autocomplete="off">
+    <label>협력업체</label><input name="company">
+    <label>차량번호</label><input name="reg_no">
+    <label>운전원</label><input name="driver">
+    <label>작업명</label><input name="work_name">
+    <label>결재상태</label><select name="status"><option value="">전체</option><option>작성중</option><option>상신</option><option>결재완료</option><option>반려</option></select>
+    <label>작업기간</label><span class="rng"><input type="date" name="ws"> ~ <input type="date" name="we"></span>
+    <label>등록일</label><span class="rng"><input type="date" name="rs"> ~ <input type="date" name="re"></span>
+  </form>
+  <div class="srch-bar"><span class="muted" id="list-count"></span><span><label class="btn gray xl-pick" title="기존 시스템에서 저장한 작업계획서 엑셀을 올리면 내용을 옮겨 적습니다">엑셀 불러오기<input type="file" accept=".xlsx" class="xl-file" hidden></label><a class="btn gray" href="#/new">등록</a><button type="button" class="btn gray" id="btn-excel">엑셀</button></span></div>
+  <table class="grid list">
+    <thead><tr><th rowspan="2">No</th><th rowspan="2">현장명</th><th rowspan="2">협력업체</th><th rowspan="2">차량번호</th><th rowspan="2">운전원</th><th colspan="2">장비명</th><th rowspan="2">작업명</th><th rowspan="2">작업기간</th><th rowspan="2">작업장소</th><th rowspan="2">결재상태</th><th rowspan="2">등록일</th></tr>
+      <tr><th>장비</th><th>중량물작업</th></tr></thead>
+    <tbody id="list-body"></tbody>
+  </table>
+  </div>
+
+  <!-- 일일점검표: 작업계획서 장비에 맞는 점검표를 골라 출력 -->
+  <div class="sub" data-sub="chk" hidden>
+    <div class="chk-bar">
+      <label>주 시작일(월) <input type="date" id="chk-week"></label>
+      <label>검색 <input id="chk-q" placeholder="작업명·차량번호·운전원"></label>
+      <span class="chk-blank"><label>빈 양식 <select id="chk-blank-kind"></select></label><button type="button" class="btn gray" id="chk-blank">빈 양식 출력</button></span>
+    </div>
+    <p class="hint">작업계획서에 적힌 현장명·장비번호·형식·연식·반입일·운전원이 점검표 머리칸에 그대로 들어갑니다. 장비 하나에 점검표가 여러 종류면 행에서 고를 수 있습니다.</p>
+    <table class="grid list chk-list">
+      <thead><tr><th>No</th><th>장비</th><th>차량번호</th><th>형식(모델명)</th><th>연식</th><th>반입일</th><th>운전원</th><th>작업기간</th><th>점검표</th><th>출력</th></tr></thead>
+      <tbody id="chk-body"></tbody>
+    </table>
+  </div>
+</template>
+
+<template id="tpl-edit">
+  <form id="f" autocomplete="off">
+  <div class="row-between sticky">
+    <h2 id="form-title">건설장비 작업계획서 등록/수정</h2>
+    <div class="actions">
+      <a class="btn" href="#/">목록</a>
+      <label class="btn xl-pick" id="xl-edit" title="기존 시스템에서 저장한 작업계획서 엑셀을 올리면 내용을 옮겨 적습니다">엑셀 불러오기<input type="file" accept=".xlsx" class="xl-file" hidden></label>
+      <select name="status"><option>작성중</option><option>상신</option><option>결재완료</option><option>반려</option></select>
+      <button type="button" class="btn" id="btn-print">출력</button>
+      <button type="button" id="btn-del" class="btn danger">삭제</button>
+      <button type="submit" class="btn primary">저장</button>
+    </div>
+  </div>
+
+  <div class="import-note" id="import-note" hidden></div>
+  <section class="card">
+    <table class="grid approve">
+      <tr><th>현장소장</th><th>관리감독자</th><th>안전관리자</th><th>운전원</th></tr>
+      <tr><td><input name="approver1" placeholder="성명"></td><td><input name="approver2" placeholder="성명"></td><td><input name="approver3" placeholder="성명"></td><td><input name="approver4" placeholder="성명"></td></tr>
+      <tr class="sign-row"><td><span class="sign-label">(서명)</span></td><td><span class="sign-label">(서명)</span></td><td><span class="sign-label">(서명)</span></td><td><span class="sign-label">(서명)</span></td></tr>
+    </table>
+  </section>
+
+  <div class="tabs">
+    <button type="button" data-tab="1" class="active">작업계획서</button>
+    <button type="button" data-tab="2" id="tab2">양중 작업계획서</button>
+    <button type="button" data-tab="3" id="tab3">중량물 취급계획서</button>
+  </div>
+
+  <!-- TAB 1 -->
+  <div class="tab" data-pane="1">
+    <section class="card"><h3>1. 작업개요</h3>
+      <table class="grid form">
+        <tr><th>현장명</th><td><input name="site_name"></td><th>작업기간 *</th><td><input type="date" name="work_start"> ~ <input type="date" name="work_end"></td></tr>
+        <tr><th>작업명 *</th><td colspan="3"><input name="work_name" class="w100"></td></tr>
+        <tr><th>업체명</th><td><input name="company_name"></td><th>작업장소 *</th><td><input name="work_place" class="w100"></td></tr>
+        <tr><th>반입일 *</th><td><input type="date" name="in_date"></td><th>반출예정일 *</th><td><input type="date" name="out_date"></td></tr>
+      </table>
+    </section>
+
+    <section class="card"><h3>2. 기계, 장비정보</h3>
+      <table class="grid form fixed">
+        <colgroup><col style="width:76px"><col style="width:120px"><col><col style="width:150px"><col></colgroup>
+        <tr><th colspan="2">장비명 *</th><td><select name="equip_type" id="equip_type"></select></td><th>차량번호 *</th><td><input name="reg_no"></td></tr>
+        <tr><th colspan="2">제조사</th><td><input name="manufacturer"></td><th>모델명</th><td><input name="model_name"></td></tr>
+        <tr><th colspan="2">제작년도</th><td><select name="make_year" id="make_year"></select></td><th>점검강화대상 <span class="tip" data-tip="tip-strength" tabindex="0">!</span></th><td class="cond" data-yn="inspection_yn">
+              <label><input type="radio" name="inspection_yn" value="해당"> 해당</label><span class="when-on"> (점검일 : <input type="date" name="inspection_date">)</span>
+              <label><input type="radio" name="inspection_yn" value="미해당"> 미해당</label>
+              <div class="file when-on" data-key="inspection"></div></td></tr>
+        <tr><th colspan="2">규격</th><td><input name="spec"></td><th>구조변경사항 <span class="tip" data-tip="tip-change" tabindex="0">!</span></th><td class="cond" data-yn="change_issue_yn">
+              <label><input type="radio" name="change_issue_yn" value="해당"> 해당</label>
+              <label><input type="radio" name="change_issue_yn" value="미해당"> 미해당</label>
+              <div class="file when-on" data-key="change_issue"></div></td></tr>
+        <tr><th colspan="2">보험유효기간</th>
+            <td class="period" data-yn="insur_yn"><span class="radios inline" data-name="insur_yn" data-opts="해당,미해당"></span><span class="nowrap"><input type="date" name="insur_start"> ~ <input type="date" name="insur_end"></span>
+              <div class="file" data-key="insur"></div></td>
+            <th>중량물작업</th><td><span class="radios inline" data-name="heavy_work" data-opts="미해당,지게차,굴착기,크레인,기타"></span><span id="heavy-etc" class="nowrap" hidden>( <label><input type="checkbox" name="heavy_etc_lift"> 양중</label> <label><input type="checkbox" name="heavy_etc_heavy"> 중량물</label> )</span></td></tr>
+        <tr><th rowspan="2" class="grp">검사<br>유효기간</th><th class="sub">건설기계 등록증<br>및 검사증</th>
+            <td class="period" data-yn="car_insp_yn"><span class="radios inline" data-name="car_insp_yn" data-opts="해당,미해당"></span><span class="nowrap"><input type="date" name="car_insp_start"> ~ <input type="date" name="car_insp_end"></span>
+              <div class="file" data-key="car_insp"></div></td>
+            <th>굴착작업</th><td class="radios" data-name="excavation_yn" data-opts="해당,미해당"></td></tr>
+        <tr><th class="sub">안전검사 <span class="tip" data-tip="tip-safe" tabindex="0">!</span></th>
+            <td class="period" data-yn="safe_insp_yn"><span class="radios inline" data-name="safe_insp_yn" data-opts="해당,미해당"></span><span class="nowrap"><input type="date" name="safe_insp_start"> ~ <input type="date" name="safe_insp_end"></span>
+              <div class="file" data-key="safe_insp"></div></td>
+            <th>반입전 점검표</th><td><div class="file" data-key="precheck"></div></td></tr>
+      </table>
+    </section>
+
+    <section class="card"><h3>3. 작업인원(연락방법)</h3>
+      <div id="personnel"></div>
+    </section>
+
+    <section class="card"><h3>4. 작업장소의 지형 · 지반 상태</h3>
+      <table class="grid form fixed ground">
+        <colgroup><col style="width:160px"><col style="width:200px"><col></colgroup>
+        <tr><th rowspan="2" class="c">작업장소의 지형 · 지반 상태</th><th class="c">작업장소 지형 및 지반 상태</th>
+          <td><div class="gline">지반 종류 ( <span class="radios inline" data-name="ground_type" data-opts="콘크리트,아스콘,모래,일반 흙,연암,경암"></span>)</div>
+              <div class="gline">상태 ( <span class="radios inline" data-name="ground_status" data-opts="견고,연약,동결,특이사항"></span><input class="act" name="ground_status_note" data-when="ground_status=특이사항" data-label="지반 특이사항"> )</div></td></tr>
+        <tr><th class="c">지하수위 등 함수 상태</th>
+          <td><div class="gline"><label><input type="radio" name="water_status" value="양호"> 양호</label></div>
+              <div class="gline"><label><input type="radio" name="water_status" value="불량"> 불량 : 조치</label><input class="act" name="water_action" data-when="water_status=불량" data-label="지하수위 불량 조치"></div></td></tr>
+        <tr><th rowspan="3" class="c">주변 작업 · 이동 및 지장물 간섭</th><th class="c">작업반경 내 출입금지 조치</th>
+          <td><div class="gline"><span class="radios inline" data-name="no_entry" data-opts="유도자,바리케이트,라바콘"></span></div>
+              <div class="gline"><label><input type="radio" name="no_entry" value="기타"> 기타</label><input class="act" name="no_entry_etc" data-when="no_entry=기타" data-label="출입금지 기타 조치"></div></td></tr>
+        <tr><th class="c">주변 가공전선 접촉가능 여부</th>
+          <td><div class="gline"><label><input type="radio" name="contact_wire" value="있음"> 있음 : 조치</label><input class="act" name="contact_wire_action" data-when="contact_wire=있음" data-label="가공전선 접촉 조치"></div>
+              <div class="gline"><label><input type="radio" name="contact_wire" value="없음"> 없음</label></div></td></tr>
+        <tr><th class="c">주변 지장물 간섭 여부</th>
+          <td><div class="gline"><label><input type="radio" name="interference" value="있음"> 있음 : 조치</label><input class="act" name="interference_action" data-when="interference=있음" data-label="지장물 간섭 조치"></div>
+              <div class="gline"><label><input type="radio" name="interference" value="없음"> 없음</label></div></td></tr>
+      </table>
+    </section>
+
+    <section class="card"><h3>5. 운행경로 <span class="tip" data-tip="tip-route" tabindex="0">!</span></h3>
+      <table class="grid route fixed">
+        <tr><th>현장외곽</th><th>내부장소 (<label><input type="radio" name="route_in_yn" value="해당"> 해당</label> <label><input type="radio" name="route_in_yn" value="미해당"> 미해당</label>)</th></tr>
+        <tr><td><div class="file" data-key="route_out" data-accept="image/*" data-preview></div></td>
+            <td><div class="file" data-key="route_in" data-accept="image/*" data-preview data-show-when="route_in_yn=해당"></div></td></tr>
+        <tr class="pv-row"><td><div class="preview" id="pv-route_out"></div></td>
+            <td><div class="preview" id="pv-route_in" data-show-when="route_in_yn=해당"></div></td></tr>
+      </table>
+    </section>
+
+    <section class="card">
+      <div class="row-between"><h3>6. 작업내용(순서), 재해유형별 안전조치 <span class="tip" data-tip="tip-work" tabindex="0">!</span></h3>
+        <span class="pbtns"><button type="button" class="btn sm dark" id="add-work">행추가</button><button type="button" class="btn sm dark" id="del-work">행삭제</button></span></div>
+      <table class="grid rows work fixed">
+        <colgroup><col style="width:34px"><col style="width:52px"><col style="width:22%"><col style="width:96px"><col style="width:22%"><col></colgroup>
+        <thead><tr><th class="chk"><input type="checkbox" class="chk-all"></th><th>순서</th><th>작업내용</th><th colspan="2">위험요인</th><th>안전대책</th></tr></thead>
+        <tbody id="work-body"></tbody></table>
+    </section>
+
+    <section class="card"><h3>7. 첨부파일</h3>
+      <table class="grid attach fixed">
+        <colgroup><col style="width:290px"><col style="width:36%"><col></colgroup>
+        <tr><th>타워크레인, 항타기 설치해체작업계획서</th><td><div class="file" data-key="att_tower"></div></td><td class="desc">· 타워크레인, 항타기 설치·조립·변경 계획서 업로드</td></tr>
+        <tr><th>비파괴검사</th><td><div class="file" data-key="att_ndt"></div></td><td class="desc">· 비파괴 검사 증명서(크레인, 양중함, 양중공도구등)</td></tr>
+        <tr><th>지내력검토서</th><td><div class="file" data-key="att_bearing"></div></td><td class="desc">· 크롤러크레인 지내력 검토서</td></tr>
+        <tr><th>양중검토서</th><td><div class="file" data-key="att_lift_review"></div></td><td class="desc">· 복합양중, 2줄걸이 이상 작업시(요청시 첨부)</td></tr>
+        <tr><th>제원표</th><td><div class="file" data-key="att_spec"></div></td><td class="desc">· 장비 제원표(크레인 및 굴착기 양중 작업시, 인양제원표 등)</td></tr>
+        <tr><th>카운터웨이트 구성도</th><td><div class="file" data-key="att_counterweight"></div></td><td class="desc">· 인양작업 시 카운터웨이트 중량/구성도(이동식크레인, 항타기 등)</td></tr>
+      </table>
+    </section>
+  </div>
+
+  <!-- TAB 2 : 양중 작업계획서 (원본 divTab2 와 같은 18칸 구성) -->
+  <div class="tab" data-pane="2" hidden>
+    <section class="card">
+      <table class="grid lift fixed">
+        <colgroup><col span="18"></colgroup>
+        <tr><th colspan="18">양중 작업계획서</th></tr>
+        <tr><th colspan="9">평면도</th><th colspan="9">입면도</th></tr>
+        <tr><td colspan="9" class="al"><div class="file" data-key="lift_plan" data-accept="image/*" data-preview></div></td>
+            <td colspan="9" class="al"><div class="file" data-key="lift_elev" data-accept="image/*" data-preview></div></td></tr>
+        <tr class="pv-row"><td colspan="9"><div class="preview" id="pv-lift_plan"></div></td><td colspan="9"><div class="preview" id="pv-lift_elev"></div></td></tr>
+        <tr><th colspan="2">건설기계(장비) Model</th><td colspan="6" id="lift-model"></td><th colspan="2">줄걸이 종류</th>
+            <td colspan="8" class="al" id="lift-linekind">
+              <label><input type="radio" disabled data-lk="01"> 와이어로프</label>
+              <label><input type="radio" disabled data-lk="02"> 라운드(웹)슬링</label>
+              <label><input type="radio" disabled data-lk="03"> 수동입력</label></td></tr>
+        <tr><th colspan="2">양중기 종류</th><td colspan="16" class="al radios" data-name="lift.crane_kind" data-opts="H/C, 카고|C/C|T/C|굴착기|크레인(호이스트)" data-sep="|"></td></tr>
+        <tr><th colspan="2">Boom 길이</th><td colspan="5"><input class="ln" name="lift.boom"></td><td>m</td>
+            <th colspan="2">권상용 와이어로프 수</th><td colspan="7"><input class="ln" name="lift.line_qty" data-int></td><td>EA</td></tr>
+        <tr><th colspan="2">Luffing(보조) 붐</th><td colspan="2"><input class="ln" name="lift.luffing_len"></td><td>m</td><td>각도</td><td><input class="ln" name="lift.luffing_angle"></td><td>°</td>
+            <th colspan="2" rowspan="2">필요 지내력<br>(아우트리거 장비)</th><td colspan="2">건설기계(장비) 중량</td><td colspan="2"><input class="ln hc" name="lift.equ_weight"></td><td>Ton</td>
+            <td>접지하중</td><td data-lo="ground_load"></td><td>Ton</td></tr>
+        <tr><th colspan="2">작업반경</th><td colspan="5"><input class="ln" name="lift.radius"></td><td>m</td>
+            <td colspan="2">받침 철판</td><td>가로</td><td><input class="ln hc" name="lift.iron_w"></td><td>m</td><td>세로</td><td><input class="ln hc" name="lift.iron_h"></td><td>m</td></tr>
+        <tr><th colspan="2">양중높이</th><td colspan="5"><input class="ln" name="lift.height"></td><td>m</td>
+            <th rowspan="4">중량물</th><th>종류</th><td colspan="8" data-lo="kind"></td></tr>
+        <tr><th colspan="2">Counter weight</th><td colspan="5"><input class="ln" name="lift.counter_weight"></td><td>Ton</td>
+            <th>규격</th><td data-lo="size1"></td><td>m</td><td>X</td><td data-lo="size2"></td><td>m</td><td>X</td><td data-lo="size3"></td><td>m</td></tr>
+        <tr><th rowspan="2">아우<br>트리거<br>길이</th><th>전면</th><td colspan="2"><input class="ln" name="lift.outrigger_front"></td><td>m</td>
+            <td colspan="3" rowspan="2">아우트리거는 최대 확장 기준</td><th>무게</th><td colspan="7" data-lo="weight"></td><td>Ton</td></tr>
+        <tr><th>후면</th><td colspan="2"><input class="ln" name="lift.outrigger_back"></td><td>m</td>
+            <th>줄걸이,<br>훅 중량</th><td colspan="7"><input class="ln" name="lift.hook_weight"></td><td>Ton</td></tr>
+        <tr><th colspan="2">최대 양중능력 <span class="tip" data-tip="tip-maxcap" tabindex="0">!</span></th><td colspan="5"><input class="ln" name="lift.max_capacity"></td><td>Ton</td>
+            <th colspan="2">정격 총하중</th><td colspan="7" data-lo="total"></td><td>Ton</td></tr>
+        <tr><th colspan="6">현장 지내력 검토(H/C, 카고 限)</th><th colspan="2">최대 양중능력</th><td data-lo="maxcap"></td><td>Ton</td>
+            <th colspan="4">사용율</th><th colspan="4">검토 결과</th></tr>
+        <tr><th colspan="2">현장 지내력<sup>3)</sup> <span class="tip" data-tip="tip-bearing" tabindex="0">!</span></th><td><input class="ln hc" name="lift.site_rate"></td><th>&gt;</th><td data-lo="need_bearing"></td>
+            <th class="sm">필요<br>지내력<br>(아우<br>트리거)</th><th colspan="2">정격 총하중</th><td data-lo="total2"></td><td>Ton</td><td colspan="4" data-lo="total_rate"></td><td colspan="4" data-lo="total_rslt"></td></tr>
+        <tr><th colspan="2">검토 결과</th><td colspan="4" data-lo="site_rslt"></td><th colspan="2">줄걸이 안전하중</th><td data-lo="rope_safe"></td><td>Ton</td>
+            <td colspan="4" data-lo="rope_rate"></td><td colspan="4" data-lo="rope_rslt"></td></tr>
+      </table>
+      <!-- 중량물 목록 -->
+      <table class="grid lift fixed" id="lift-heavy-list"><colgroup><col span="18"></colgroup><tbody></tbody></table>
+      <!-- 줄걸이 검토 (중량물 탭에서 입력한 값, 읽기 전용) -->
+      <div id="lift-rope"></div>
+      <p class="hint" id="lift-rope-empty">줄걸이 검토는 중량물 취급계획서 탭에서 입력합니다. 줄걸이검토 '해당'인 중량물 중 가장 무거운 것이 여기에 표시됩니다.</p>
+    </section>
+  </div>
+
+  <!-- TAB 3 -->
+  <div class="tab" data-pane="3" hidden>
+    <section class="card">
+      <div class="row-between"><h3>중량물 취급계획서</h3>
+        <span class="pbtns"><button type="button" class="btn sm dark" id="add-heavy">행추가</button><button type="button" class="btn sm dark" id="del-heavy">행삭제</button></span></div>
+      <table class="grid rows heavy fixed">
+        <colgroup><col style="width:34px"><col style="width:22%"><col><col style="width:14%"><col style="width:72px"><col style="width:72px"><col style="width:72px"><col style="width:80px"><col style="width:64px"><col style="width:72px"></colgroup>
+        <thead>
+          <tr><th class="chk" rowspan="2"><input type="checkbox" class="chk-all"></th><th colspan="7">중량물 취급계획서</th><th colspan="2">줄걸이검토</th></tr>
+          <tr><th>중량물 형상, 무게중심 표기</th><th><span class="req">*</span>자재운반시 결박방법</th><th><span class="req">*</span>종류</th>
+              <th><span class="req">*</span>길이(m)</th><th><span class="req">*</span>높이(m)</th><th><span class="req">*</span>넓이(m)</th><th><span class="req">*</span>중량(Ton)</th><th>해당여부</th><th>상세보기</th></tr>
+        </thead>
+        <tbody id="heavy-body"></tbody></table>
+    </section>
+  </div>
+  </form>
+</template>
+
+<!-- 툴팁 내용 -->
+<template id="tip-safe">
+  <table class="tipgrid">
+    <tr><th>안전검사 대상품</th><th>안전검사</th></tr>
+    <tr><td>크레인(이동식 제외)</td><td rowspan="3">사업장에 설치가 끝난 날부터 3년 이내에 최초 안전검사를 실시하되, 그 이후부터 2년마다 실시<br>※ 건설현장에서 사용하는 것은 최초로 설치한 날부터 6개월마다 실시</td></tr>
+    <tr><td>리프트(이삿짐운반용 제외)</td></tr>
+    <tr><td>곤돌라</td></tr>
+    <tr><td>이동식 크레인</td><td rowspan="3">자동차관리법 제8조에 따른 신규등록 이후 3년 이내에 최초 안전검사를 실시하되, 그 이후부터 2년마다 실시</td></tr>
+    <tr><td>이삿짐운반용 리프트</td></tr>
+    <tr><td>고소작업대</td></tr>
+    <tr><td>압력용기</td><td rowspan="9">사업장에 설치가 끝난 날부터 3년 이내에 최초 안전검사를 실시하되, 그 이후부터 2년마다 실시<br>※ 공정안전보고서를 제출하여 확인을 받은 압력용기는 4년마다 실시</td></tr>
+    <tr><td>프레스</td></tr><tr><td>전단기</td></tr><tr><td>롤러기</td></tr><tr><td>사출성형기</td></tr>
+    <tr><td>원심기</td></tr><tr><td>국소배기장치</td></tr><tr><td>컨베이어</td></tr><tr><td>산업용 로봇</td></tr>
+  </table>
+</template>
+
+<template id="tip-strength">
+  <table class="tipgrid strength">
+    <tr><th colspan="2">적용장비</th><th colspan="5">제작년도</th><th rowspan="2">비 고</th></tr>
+    <tr><th>장비명</th><th>건설기계<br>유무(O,X)</th><th>~5년 이하</th><th>5년 초과<br>~10년 이하</th><th>10년 초과<br>~15년 이하</th><th>15년 초과<br>~20년 이하</th><th>20년 초과</th></tr>
+    <tr><td>타워 크레인</td><td>O</td><td colspan="2" class="y">●+★</td><td colspan="3" class="r">사용금지<br>(사용 승인 불가)</td><td>설치시점 기준<br>추가마스트<br>비파괴검사 포함</td></tr>
+    <tr><td>고소작업차<br>(스카이)</td><td rowspan="2">X</td><td colspan="2" rowspan="4" class="y">★</td><td rowspan="4" class="y">●+★</td><td colspan="2" rowspan="2" class="r">사용금지<br>(사용 승인 불가)</td><td>안전인증, 안전검사 받은 장비 사용<br>HS4570 PLUS 사용금지<br>(추가점검표 작성)</td></tr>
+    <tr><td>카고 크레인</td><td>안전인증, 안전검사 받은 장비 사용</td></tr>
+    <tr><td class="g">콘크리트 펌프카</td><td rowspan="4">O</td><td colspan="2" rowspan="2" class="r left">1. 15년 초과시 추가조치<br>2. 반입 후 6개월 마다 본사 사용승인<br>3. 매월 이행상태 모니터링</td><td>붐 미설치 장비는 굴착기와 동일기준</td></tr>
+    <tr><td class="g">항타/항발기</td><td></td></tr>
+    <tr><td>하이드로 /<br>크롤러 크레인</td><td class="n"></td><td class="y">★</td><td colspan="2" class="y">●+★</td><td rowspan="5" class="r left">● 20년 초과시<br><br>1. 반입 후 6개월 마다 본사 사용승인<br>2. 매월 이행상태 모니터링</td><td>과부하 방지장치 미설치 장비 사용금지</td></tr>
+    <tr><td>천공기<br>(현장 조립장비 限)</td><td colspan="2" class="n"></td><td colspan="2" class="y">●+★</td><td>현장 미조립장비는 굴착기와 동일기준</td></tr>
+    <tr><td>이삿짐용 리프트<br>(사다리차)</td><td>X</td><td colspan="3" class="n"></td><td class="y">★</td><td>안전인증, 안전검사 받은 장비 사용</td></tr>
+    <tr><td>덤프트럭<br>콘크리트 믹서트럭</td><td rowspan="2">O</td><td colspan="4" class="n"></td><td>월대, 직영장비 限 간헐적 작업 장비 관리기준 준수</td></tr>
+    <tr><td>불도저, 굴착기,<br>로더, 지게차<br>롤러, 모터그레이더</td><td colspan="4" class="n"></td><td>일대 및 월대 사용장비 (안전장치 설치)</td></tr>
+  </table>
+</template>
+
+<template id="tip-change">
+  <div class="tiptext">
+    <p>제42조(구조변경범위등) 법 제17조제2항의 규정에 의한 주요구조의 변경 및 개조의 범위는 다음 각호와 같다. 다만, 건설기계의 기종변경, 육상작업용 건설기계규격의 증가 또는 적재함의 용량증가를 위한 구조변경은 이를 할 수 없다. &lt;개정 2003. 9. 26., 2019. 3. 19.&gt;</p>
+    <ol>
+      <li>원동기 및 전동기의 형식변경</li><li>동력전달장치의 형식변경</li><li>제동장치의 형식변경</li><li>주행장치의 형식변경</li>
+      <li>유압장치의 형식변경</li><li>조종장치의 형식변경</li><li>조향장치의 형식변경</li>
+      <li>작업장치의 형식변경. 다만, 가공작업을 수반하지 아니하고 작업장치를 선택부착하는 경우에는 작업장치의 형식변경으로 보지 아니한다.</li>
+      <li>건설기계의 길이·너비·높이 등의 변경</li><li>수상작업용 건설기계의 선체의 형식변경</li><li>타워크레인 설치기초 및 전기장치의 형식변경</li>
+    </ol>
+  </div>
+</template>
+
+<template id="tip-route">
+  <div class="tiptext">
+    <p><b>운행경로 도면 첨부 안내</b></p>
+    <ol>
+      <li>현장외곽: 장비 반입 · 반출 및 현장 외곽 이동 경로가 표시된 도면(사진)</li>
+      <li>내부장소: 현장 내부에서 작업할 경우 내부 운행경로 · 작업위치 · 유도자 배치가 표시된 도면(사진)</li>
+      <li>사진 파일(JPG, PNG 등)만 첨부할 수 있으며, 첨부하면 아래에 미리보기가 표시됩니다.</li>
+    </ol>
+  </div>
+</template>
+
+<template id="tip-work">
+  <div class="tiptext">
+    <p><b>작업내용 및 재해유형별 안전조치 작성 안내</b></p>
+    <ol>
+      <li>협착 · 붕괴 · 전도 · 낙하 · 추락 5가지 재해유형은 기본으로 들어가 있으며, 각각 1건 이상 있어야 저장됩니다.</li>
+      <li>작업 순서대로 작업내용을 적고, 해당 작업의 위험요인과 안전대책을 작성합니다.</li>
+      <li>필요한 경우 행추가로 작업을 더 넣을 수 있고, 순서는 자동으로 매겨집니다.</li>
+    </ol>
+  </div>
+</template>
+
+<!-- 줄걸이 검토 등록/수정 (원본 SSEquipWorkPlanRopeDetailPop 과 같은 구성) -->
+<dialog id="rope-dlg">
+  <div class="dlg-head"><h3>줄걸이 검토 등록/수정</h3><span class="muted" id="rp-weight"></span>
+    <span class="pbtns"><button type="button" class="btn sm dark" id="rp-save">저장</button><button type="button" class="btn sm" id="rp-close">닫기</button></span></div>
+  <table class="grid rp">
+    <colgroup><col span="18"></colgroup>
+    <tr><th colspan="2">줄걸이 종류</th><td colspan="16" class="al">
+      <label><input type="radio" name="rp-kind" value="01"> 와이어로프</label>
+      <label><input type="radio" name="rp-kind" value="02"> 라운드(웹)슬링</label>
+      <label><input type="radio" name="rp-kind" value="03"> 수동입력</label></td></tr>
+  </table>
+  <table class="grid rp">
+    <colgroup><col span="18"></colgroup>
+    <!-- 와이어로프 -->
+    <tr class="k01"><th colspan="2" rowspan="4">와이어로프<br>줄걸이<br>검토</th><td colspan="2" rowspan="2">종류</td><td colspan="3" rowspan="2">와이어로프</td>
+      <th colspan="2">길이</th><td colspan="3"><input data-r="wSize" inputmode="decimal"></td><td>m</td><td colspan="4"><input data-r="wQty" inputmode="numeric"></td><td>EA</td></tr>
+    <tr class="k01"><th colspan="2" rowspan="2">하중 계산</th><td colspan="2" data-o="wF"></td><td>X</td><td colspan="2" data-o="wQty"></td><td colspan="4">(파단하중 X 줄걸이수)</td></tr>
+    <tr class="k01"><td colspan="2">파단하중</td><td colspan="2"><input data-r="wF" inputmode="decimal"></td><td>Ton</td>
+      <td colspan="2"><input data-r="wR1" inputmode="decimal"></td><td>X</td><td colspan="2"><input data-r="wR2" inputmode="decimal"></td>
+      <td colspan="4"><span class="tip q" data-tip="tip-sf" tabindex="0">?</span> (안전계수 X 장력계수) <span class="tip q" data-tip="tip-tension" tabindex="0">?</span></td></tr>
+    <tr class="k01"><td colspan="2">안전하중</td><td colspan="2" data-o="wSafe"></td><td>Ton</td><th colspan="2">결과</th><td colspan="9" data-o="wRslt"></td></tr>
+    <!-- 라운드(웹)슬링 -->
+    <tr class="k02"><th colspan="2" rowspan="4">라운드(웹)슬링<br>줄걸이<br>검토</th><td colspan="2" rowspan="2">종류</td><td colspan="3" rowspan="2">라운드(웹)슬링</td>
+      <th colspan="2">규격</th><td colspan="3"><input data-r="rSize" inputmode="decimal"></td><td>Ton</td><td colspan="4"><input data-r="rQty" inputmode="numeric"></td><td>EA</td></tr>
+    <tr class="k02"><th colspan="2" rowspan="2">하중 계산</th><td colspan="2" data-o="rSize"></td><td>X</td><td colspan="2" data-o="rQty"></td><td colspan="4">(안전하중 X 줄걸이수)</td></tr>
+    <tr class="k02"><td colspan="2">안전하중</td><td colspan="2" data-o="rSafe"></td><td>Ton</td>
+      <td colspan="2" data-o="rR1"></td><td>X</td><td colspan="2"><input data-r="rR2" inputmode="decimal"></td>
+      <td colspan="4">장력계수 <span class="tip q" data-tip="tip-tension" tabindex="0">?</span></td></tr>
+    <tr class="k02"><td colspan="2">줄걸이 방법</td><td colspan="3"><select data-r="rMethod"><option value="">선택</option><option value="01">일자걸이</option><option value="02">초크걸이</option></select></td>
+      <th colspan="2">결과</th><td colspan="11" data-o="rRslt"></td></tr>
+    <!-- 수동입력 -->
+    <tr class="k03"><th colspan="2" rowspan="4">수동입력</th><td colspan="2" rowspan="2">종류</td><td colspan="3" rowspan="2"><input data-r="mKind"></td>
+      <th colspan="2">규격</th><td colspan="3"><input data-r="mSize" inputmode="decimal"></td><td>Ton</td><td colspan="4"><input data-r="mQty" inputmode="numeric"></td><td>EA</td></tr>
+    <tr class="k03"><th colspan="2" rowspan="2">하중 계산</th><td colspan="2" data-o="mSize"></td><td>X</td><td colspan="2" data-o="mQty"></td><td colspan="4">(파단하중 X 줄걸이수)</td></tr>
+    <tr class="k03"><td colspan="2">파단하중</td><td colspan="2"><input data-r="mF" inputmode="decimal"></td><td>Ton</td>
+      <td colspan="2"><input data-r="mR1" inputmode="decimal"></td><td>X</td><td colspan="2"><input data-r="mR2" inputmode="decimal"></td>
+      <td colspan="4"><span class="tip q" data-tip="tip-sf" tabindex="0">?</span> (안전계수 X 장력계수) <span class="tip q" data-tip="tip-tension" tabindex="0">?</span></td></tr>
+    <tr class="k03"><td colspan="2">안전하중</td><td colspan="2" data-o="mSafe"></td><td>Ton</td><th colspan="2">결과</th><td colspan="9" data-o="mRslt"></td></tr>
+    <!-- 공도구 -->
+    <tbody id="rp-tools"></tbody>
+  </table>
+  <p class="rp-note k02">※ 제조사 안전작업하중(SWL) 6:1 이상 표시된 라운드(웹)슬링 限 작성가능<br>
+    (단, 사람이 탑승하는 <b>맨바스켓</b> 인양 작업은 수동입력 선택후 안전계수 10을 적용후 작성)</p>
+</dialog>
+
+<template id="tip-sf">
+  <table class="tipgrid">
+    <tr><th colspan="3" class="left">■ 안전계수</th></tr>
+    <tr><td>용도</td><td>안전계수</td><td>비고</td></tr>
+    <tr><td>탑승용</td><td>10</td><td>근로자 탑승 운반구</td></tr>
+    <tr><td>줄걸이용</td><td>5</td><td>자재 양중</td></tr>
+    <tr><td>양중공도구</td><td>3</td><td>훅, 샤클, 클램프, 리프팅 빔</td></tr>
+    <tr><td>그 외</td><td>4</td><td>그 밖의 경우</td></tr>
+  </table>
+</template>
+
+<template id="tip-tension">
+  <table class="tipgrid">
+    <tr><th colspan="6" class="left">■ 2줄걸이 장력계수</th></tr>
+    <tr><td>각도</td><td>계수</td><td>각도</td><td>계수</td><td>각도</td><td>계수</td></tr>
+    <tr><td>0</td><td>1.000</td><td>50</td><td>1.103</td><td>100</td><td>1.556</td></tr>
+    <tr><td>10</td><td>1.004</td><td>60</td><td>1.155</td><td>110</td><td>1.743</td></tr>
+    <tr><td>20</td><td>1.015</td><td>70</td><td>1.221</td><td>120</td><td>2.000</td></tr>
+    <tr><td>30</td><td>1.035</td><td>80</td><td>1.35</td><td>130</td><td>2.366</td></tr>
+    <tr><td>40</td><td>1.065</td><td>90</td><td>1.414</td><td>140</td><td>2.924</td></tr>
+    <tr><th colspan="6" class="left">■ 3~4줄걸이 장력계수</th></tr>
+    <tr><td colspan="3">양중 각도</td><td colspan="3">장력 계수</td></tr>
+    <tr><td colspan="3">45° 미만</td><td colspan="3">1.43</td></tr>
+    <tr><td colspan="3">45° 이상</td><td colspan="3">2</td></tr>
+  </table>
+</template>
+
+<template id="tip-maxcap">
+  <div class="tiptext"><p>■ 맨바스켓 등 근로자 탑승 작업 : 양중능력(제원표) X 50% 적용</p></div>
+</template>
+
+<template id="tip-bearing">
+  <table class="tipgrid">
+    <tr><th colspan="9" class="left">■ 건축물의 구조기준 등에 관한 규칙 [별표8] 지내력의 단기응력(장기응력의 1.5배) 적용3)</th></tr>
+    <tr><td colspan="2" rowspan="2">지반의 종류</td><td rowspan="2">경암반</td><td colspan="2">연암반</td><td rowspan="2">자갈</td><td rowspan="2">자갈과 모래<br>혼합</td><td rowspan="2">모래섞인 점토<br>또는 롬토</td><td rowspan="2">모래 또는 점토</td></tr>
+    <tr><td>판암·편암 등 수성<br>암의 암반</td><td>혈암·토단반 등<br>암반</td></tr>
+    <tr><td rowspan="2">지내력</td><td>(ton/㎡)</td><td>612.2</td><td>306.1</td><td>153.1</td><td>45.9</td><td>30.6</td><td>23.0</td><td>15.3</td></tr>
+    <tr><td>(kN/㎡)</td><td>6,000.0</td><td>3,000.0</td><td>1,500.0</td><td>450.0</td><td>300.0</td><td>225.0</td><td>150.0</td></tr>
+    <tr><td colspan="9" class="left">※ 상기표는 참고사항이며, 정확한 지반 강도는 평판재하시험(PBT)등으로 알수 있습니다.</td></tr>
+  </table>
+</template>
+
+<div id="tip-pop" hidden></div>
+<div id="toast" hidden></div>
+<script type="module" src="app.js"></script>
+</body>
+</html>
