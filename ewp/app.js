@@ -25,7 +25,6 @@ const esc = v => String(v ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;
 const toast = msg => { const t = $("#toast"); (document.querySelector("dialog[open]") || document.body).append(t); t.textContent = msg; t.hidden = false; clearTimeout(t._h); t._h = setTimeout(() => t.hidden = true, 2500); };
 
 const BUCKET = "ewp-files";
-const CHK_IMG_BASE = "https://cdn.jsdelivr.net/gh/yoylgae/taehong@d45df39/ewp/chk/";
 const MAX_MB = 10;
 let curFiles = {};   // { insur: {path, name, type}, car_insp: ..., safe_insp: ..., precheck: ... }
 let pendingImport = null;   // 엑셀에서 읽어 온 값 (새 작성 화면에 채워 넣음)
@@ -235,8 +234,7 @@ async function renderList() {
 function printChecklist(key, plan) {
   const w = window.open("", "_blank");
   if (!w) return toast("팝업이 차단되었습니다. 팝업을 허용해주세요.");
-  // 점검 부위 그림은 GitHub 저장소(yoylgae/taehong)의 ewp/chk/ 에서 불러옴
-  const html = buildChecklistHtml({ key, plan, imgBase: CHK_IMG_BASE, monday: $("#chk-week")?.value || "" });
+  const html = buildChecklistHtml({ key, plan, imgBase: new URL("chk/", location.href).href, monday: $("#chk-week")?.value || "" });
   const url = URL.createObjectURL(new Blob([html], { type: "text/html;charset=utf-8" }));
   w.location.replace(url);
   setTimeout(() => URL.revokeObjectURL(url), 60000);
