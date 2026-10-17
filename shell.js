@@ -22,15 +22,17 @@ const MENUS = [
   ] },
   { name: "현대건설 일일퀘스트", items: [
     { id: "q-dabs", name: "DABs 회의자료 취합", icon: "📝", url: "https://dabs-meeting.vercel.app/", newWindow: true },
-    { id: "q-risk", name: "위험성평가 회의관리", icon: "⚠️", url: "https://hdec-yunsik.github.io/risk-meeting-web/", newWindow: true },
-    { id: "q-cost", name: "산업안전보건관리비", icon: "💰", url: "https://stellular-lokum-e9b6e2.netlify.app/", newWindow: true },
+    { id: "q-risk", name: "위험성평가 회의관리", icon: "⚠️", url: "https://hdec-yunsik.github.io/risk-meeting-web/", newWindow: true,
+      sub: ["아이디 : gd@gf32.com", "비밀번호 : 123qwe"] },
+    { id: "q-cost", name: "산업안전보건관리비(현대)", icon: "💰", url: "https://stellular-lokum-e9b6e2.netlify.app/", newWindow: true,
+      sub: ["비밀번호 : GDGS"] },
   ] },
 ];
 const ITEM = Object.fromEntries(MENUS.flatMap(m => m.items.map(i => [i.id, { ...i, top: m.name }])));
 
 $("#nav").innerHTML = `<a href="#" data-open="home" class="active"><i class="ic">⌂</i><span>홈</span></a>` +
   MENUS.map(m => `<div class="grp"><span>${esc(m.name)}</span></div>` + m.items.map(i =>
-    `<a href="#" data-open="${i.id}" class="${i.url ? "" : "todo"}"><i class="ic">${i.icon || "•"}</i><span>${esc(i.name)}</span>${i.newWindow ? '<em class="ext" title="새 창으로 열림">↗</em>' : ""}${i.id === "ewp" ? '<em class="badge" id="nav-wait" hidden></em>' : ""}</a>`).join("")).join("");
+    `<a href="#" data-open="${i.id}" class="${i.url ? "" : "todo"}"><i class="ic">${i.icon || "•"}</i><span class="nm">${esc(i.name)}${i.sub ? i.sub.map(x => `<small>${esc(x)}</small>`).join("") : ""}</span>${i.newWindow ? '<em class="ext" title="새 창으로 열림">↗</em>' : ""}${i.id === "ewp" ? '<em class="badge" id="nav-wait" hidden></em>' : ""}</a>`).join("")).join("");
 
 document.addEventListener("click", e => {
   const a = e.target.closest("[data-open]"); if (!a) return;
