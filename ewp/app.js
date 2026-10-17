@@ -1,7 +1,7 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 import { SUPABASE_URL, SUPABASE_KEY } from "../config.js";
 import { buildPrintHtml } from "./print.js";
-import { CHECKLISTS, EQUIP_CHECKLIST, buildChecklistHtml, thisMonday } from "./checklist.js";
+import { CHECKLISTS, EQUIP_CHECKLIST, buildChecklistHtml } from "./checklist.js";
 
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
 const app = document.getElementById("app");
@@ -204,7 +204,6 @@ async function renderList() {
     document.querySelectorAll(".sub").forEach(x => x.hidden = x.dataset.sub !== b.dataset.sub);
     sessionStorage.setItem("ewp.sub", b.dataset.sub);
   });
-  $("#chk-week").value = thisMonday();
   $("#chk-blank-kind").innerHTML = Object.entries(CHECKLISTS).map(([k, c]) => `<option value="${k}">${esc(c.name)}</option>`).join("");
   const drawChk = () => {
     const q = $("#chk-q").value.trim();
@@ -234,7 +233,7 @@ async function renderList() {
 function printChecklist(key, plan) {
   const w = window.open("", "_blank");
   if (!w) return toast("팝업이 차단되었습니다. 팝업을 허용해주세요.");
-  const html = buildChecklistHtml({ key, plan, imgBase: new URL("chk/", location.href).href, monday: $("#chk-week")?.value || "" });
+  const html = buildChecklistHtml({ key, plan, imgBase: new URL("chk/", location.href).href });
   const url = URL.createObjectURL(new Blob([html], { type: "text/html;charset=utf-8" }));
   w.location.replace(url);
   setTimeout(() => URL.revokeObjectURL(url), 60000);

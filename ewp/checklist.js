@@ -40,7 +40,7 @@ th{background:#f1f5f9;font-weight:600;color:#334155;text-align:center}
 .cont td.n,.chk td.n{text-align:center;font-weight:700;color:#2563eb}
 .chk th.d{width:9.5%}
 .chk td.d{text-align:center;height:30px;font-size:12px}
-.chk th.d small{display:block;font-weight:400;color:#64748b;font-size:9.5px;margin-top:1px}
+.chk th.d small{display:block;font-weight:400;color:#94a3b8;font-size:11px;margin-top:2px;height:15px;line-height:15px}
 .chk td.item{font-weight:600}
 .legend{margin:6px 0 0;font-size:9.5px;color:#475569}
 .legend b{color:#111}
@@ -70,7 +70,6 @@ function headerLift(p) {
    key: 점검표 종류, imgBase: chk/ 그림 경로 앞부분, monday: 주 시작일 */
 export function buildChecklistHtml({ key, plan: p, imgBase, monday, site }) {
   const c = CHECKLISTS[key]; if (!c) throw new Error("점검표가 없는 장비입니다.");
-  const dates = weekDates(monday);
   const title = `건설장비 일일점검표 - ${c.name}${p.reg_no ? ` (${p.reg_no})` : ""}`;
   return `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>${t(title)}</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
@@ -83,9 +82,9 @@ ${c.hdr === "lift" ? headerLift(p) : headerStd(p, c)}
 <table class="cont"><colgroup><col style="width:9%"><col></colgroup>
   <tr><th>번호</th><th>점검 내용</th></tr>
   ${c.content.map(([n, s]) => `<tr><td class="n">${t(n)}</td><td>${t(s)}</td></tr>`).join("")}</table>
-<div class="sec">일일 점검 결과${monday ? ` <span style="font-weight:500;color:#64748b">(${t(monday)} 주)</span>` : ""}</div>
+<div class="sec">일일 점검 결과</div>
 <table class="chk"><colgroup><col style="width:7%"><col><col style="width:7.6%"><col style="width:7.6%"><col style="width:7.6%"><col style="width:7.6%"><col style="width:7.6%"><col style="width:7.6%"><col style="width:7.6%"><col style="width:9%"></colgroup>
-  <tr><th>번호</th><th>점검항목</th>${DAYS.map((d, i) => `<th class="d">${d}<small>${dates[i] || "/"}</small></th>`).join("")}<th>비고</th></tr>
+  <tr><th>번호</th><th>점검항목</th>${DAYS.map(d => `<th class="d">${d}<small class="slash">/</small></th>`).join("")}<th>비고</th></tr>
   ${c.items.map(([n, s]) => `<tr><td class="n">${t(n)}</td><td class="item">${t(s)}</td>${DAYS.map(() => `<td class="d"></td>`).join("")}<td></td></tr>`).join("")}</table>
 <p class="legend">※ 검사결과 표기 — 정상 : <b>○</b>, 미흡(조건부 허용) : <b>△</b>, 불량·안전장치 이상 등(사용중지) : <b>X</b>, 해당없음 : <b>ㅡ</b></p>
 <table class="sign"><tr><th>점검자</th><td>(인)</td><th>관리감독자</th><td>(인)</td><th>안전관리자</th><td>(인)</td></tr></table>
