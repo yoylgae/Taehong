@@ -34,6 +34,7 @@ body.mini .nav a .ext{display:none}
 .side-foot{border-top:1px solid var(--line);padding:10px 12px;display:flex;flex-direction:column;gap:2px}
 .side-btn{display:flex;align-items:center;gap:10px;width:100%;border:0;background:none;padding:9px 10px;border-radius:10px;color:#3d4452;cursor:pointer;white-space:nowrap;overflow:hidden}
 .side-btn:hover{background:#f3f5f9}
+a.side-btn{text-decoration:none;font-size:14px}
 /* 접힌 사이드바 */
 body.mini .side{width:68px}
 body.mini .brand-txt,body.mini .nav a span,body.mini .nav a .badge,body.mini .side-btn span,body.mini .nav .grp span{display:none}
