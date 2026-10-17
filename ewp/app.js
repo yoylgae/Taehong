@@ -1,7 +1,7 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 import { SUPABASE_URL, SUPABASE_KEY } from "../config.js";
 import { buildPrintHtml } from "./print.js";
-import { CHECKLISTS, EQUIP_CHECKLIST, buildChecklistHtml } from "./checklist.js";
+import { CHECKLISTS, EQUIP_CHECKLIST, buildChecklistHtml, buildOriginalHtml } from "./checklist.js";
 
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
 const app = document.getElementById("app");
@@ -226,6 +226,8 @@ async function renderList() {
     printChecklist(key, { ...r, driver: r.drivers.split(" ")[0] || "" });
   };
   $("#chk-blank").onclick = () => printChecklist($("#chk-blank-kind").value, {});
+  try { $("#chk-form").value = localStorage.getItem("ewp.chkForm") || "new"; } catch {}
+  $("#chk-form").onchange = e => { try { localStorage.setItem("ewp.chkForm", e.target.value); } catch {} };
   if (sessionStorage.getItem("ewp.sub") === "chk") document.querySelector('.subtabs button[data-sub="chk"]').click();
 }
 
@@ -233,7 +235,9 @@ async function renderList() {
 function printChecklist(key, plan) {
   const w = window.open("", "_blank");
   if (!w) return toast("팝업이 차단되었습니다. 팝업을 허용해주세요.");
-  const html = buildChecklistHtml({ key, plan, imgBase: new URL("chk/", location.href).href });
+  const orig = $("#chk-form")?.value === "orig";
+  const html = orig ? buildOriginalHtml({ key, plan, imgBase: new URL("chk-orig/", location.href).href })
+    : buildChecklistHtml({ key, plan, imgBase: new URL("chk/", location.href).href });
   const url = URL.createObjectURL(new Blob([html], { type: "text/html;charset=utf-8" }));
   w.location.replace(url);
   setTimeout(() => URL.revokeObjectURL(url), 60000);

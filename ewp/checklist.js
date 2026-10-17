@@ -96,3 +96,29 @@ ${c.hdr === "lift" ? headerLift(p) : headerStd(p, c)}
   Promise.all(imgs.map(i=>i.complete?0:new Promise(r=>{i.onload=i.onerror=r;}))).then(()=>{window.focus();window.print();});
 <\/script></body></html>`;
 }
+
+/* ---------- 원본 양식(현대건설 가이드) 출력 ----------
+   가이드 PDF의 해당 페이지 그림(chk-orig/*.jpg)을 A4 한 장에 깔고, 머리칸 빈칸 위치에 값을 얹는다. */
+import { ORIG } from "./checklist-orig.js";
+export function buildOriginalHtml({ key, plan: p, imgBase }) {
+  const pos = ORIG[key]; if (!pos) throw new Error("원본 양식이 없는 장비입니다.");
+  const c = CHECKLISTS[key];
+  const title = `일일점검표(원본) - ${c.name}${p.reg_no ? ` (${p.reg_no})` : ""}`;
+  const val = k => k === "make_year" ? p.make_year : p[k];
+  const spans = Object.entries(pos).map(([k, [x, y, w, h]]) => val(k)
+    ? `<span class="v" style="left:${x}%;top:${y}%;width:${w}%;height:${h}%">${t(val(k))}</span>` : "").join("");
+  return `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>${t(title)}</title>
+<style>
+@page{size:A4;margin:0}
+*{box-sizing:border-box}
+html,body{margin:0;background:#fff}
+.page{position:relative;width:210mm;height:296mm;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.sheet{position:relative;height:296mm;aspect-ratio:540/780}
+.sheet img{position:absolute;inset:0;width:100%;height:100%}
+.v{position:absolute;display:flex;align-items:center;padding-left:1.2%;font:600 11.5px/1 "Malgun Gothic","Apple SD Gothic Neo",sans-serif;color:#000;white-space:nowrap;overflow:hidden}
+</style></head><body><div class="page"><div class="sheet"><img src="${imgBase}${key}.jpg" alt="">${spans}</div></div>
+<script>
+  const i=document.images[0];
+  (i.complete?Promise.resolve():new Promise(r=>{i.onload=i.onerror=r;})).then(()=>{window.focus();window.print();});
+<\/script></body></html>`;
+}
