@@ -225,6 +225,7 @@ function renderMonth() {
       <input class="title" id="m-title" value="${esc(m.title)}" title="제목 (인쇄물 맨 위에 들어갑니다)">
       <span class="grow"></span>
       <span class="save" id="save"></span>
+      <button class="btn primary" id="m-xlsx" title="엑셀 양식 파일에 이 달 내용을 채워서 내려받기 (서식·수식 그대로)">📤 엑셀 양식으로 저장</button>
       <select id="m-status" title="상태"><option>작성중</option><option>결재완료</option></select>
       <button class="btn sm danger" id="m-del" title="이 달 자료를 모두 지웁니다">달 삭제</button>
     </div>
@@ -234,6 +235,7 @@ function renderMonth() {
   $("#m-title").oninput = e => { m.title = e.target.value; mark("month"); };
   $("#m-status").onchange = e => { m.status = e.target.value; mark("month"); };
   $("#m-del").onclick = deleteMonth;
+  $("#m-xlsx").onclick = exportDialog;
   $$(".sheets button").forEach(b => b.onclick = () => { location.hash = `#/m/${m.id}/${b.dataset.sheet}`; });
   renderSheet();
 }
@@ -520,6 +522,62 @@ async function vendorImport(files) {
     renderMonthKeepScroll();
     toast(`인건비 ${upd}명 갱신 · ${add}명 추가` + (fillWorkers ? ` / 인적사항 ${wAdd}명 추가 · ${wFill}명 보완` : "") + " — 실행내역서 탭의 '인건비 금액 반영'으로 금액도 맞출 수 있습니다.");
   };
+}
+
+/* ================= 엑셀 양식으로 저장 ================= */
+// 양식 파일은 서버에 올리지 않고 이 브라우저(IndexedDB)에만 기억해 둠
+const tplStore = {
+  db: () => new Promise((ok, no) => { const r = indexedDB.open("pms-jy", 1); r.onupgradeneeded = () => r.result.createObjectStore("f"); r.onsuccess = () => ok(r.result); r.onerror = () => no(r.error); }),
+  async get() { try { const db = await this.db(); return await new Promise(ok => { const q = db.transaction("f").objectStore("f").get("template"); q.onsuccess = () => ok(q.result || null); q.onerror = () => ok(null); }); } catch { return null; } },
+  async set(v) { try { const db = await this.db(); await new Promise(ok => { const t = db.transaction("f", "readwrite"); t.objectStore("f").put(v, "template"); t.oncomplete = t.onerror = ok; }); } catch {} },
+};
+async function exportDialog() {
+  await flush();
+  let dlg = $("#dlg-xlsx");
+  if (!dlg) { dlg = document.createElement("dialog"); dlg.id = "dlg-xlsx"; dlg.className = "imp"; document.body.append(dlg); }
+  let saved = await tplStore.get(), picked = null, busy = false, result = null;
+  const { y, m } = ymParts(S.month.ym);
+  const outName = `${(S.month.site || S.site || "현장").replace(/\s+/g, "")}_직영실행_${String(y).slice(2)}_${m}월.xlsx`;
+  const draw = () => {
+    const tpl = picked || saved;
+    dlg.innerHTML = `<form method="dialog">
+      <h3>엑셀 양식으로 저장 <small class="muted">· ${esc(S.month.title)}</small></h3>
+      <p class="hint" style="margin:-8px 0 12px">고른 엑셀 양식 파일에서 <b>값이 들어가는 칸만</b> 이 달 내용으로 바꿉니다. 서식·병합·인쇄 설정·그림·수식은 그대로 둡니다.
+        (실행내역서 · 식대 · 인건비 · 노무비명세서 · 자재구입)</p>
+      <div class="imp-file">
+        <div class="imp-h"><b>양식 파일</b>
+          ${tpl ? `<span>${esc(tpl.name)} <small class="muted">${picked ? "(방금 고름)" : `(지난번 사용 · ${esc(new Date(saved.date).toLocaleDateString("ko-KR"))})`} · ${(tpl.blob.size / 1048576).toFixed(1)}MB</small></span>` : '<span class="muted">아직 고른 양식이 없습니다</span>'}
+          <span class="grow"></span><label class="btn up">${tpl ? "다른 양식 고르기" : "양식 파일 고르기"}<input type="file" accept=".xlsx" id="x-tpl"></label></div>
+        <p class="hint" style="margin:0">지난달 엑셀 파일을 그대로 양식으로 쓰면 됩니다. <b>.xls</b> 파일은 엑셀에서 <b>다른 이름으로 저장 → Excel 통합 문서(*.xlsx)</b>로 한 번 저장한 뒤 골라 주세요. 양식 파일은 이 컴퓨터 브라우저에만 기억되고 서버에는 올라가지 않습니다.</p>
+      </div>
+      ${result ? `<div class="imp-file ${result.error ? "err" : ""}">${result.error ? `<div class="ng"><b>만들지 못했습니다</b> — ${esc(result.error)}</div>` : `<b class="ok">✓ ${esc(outName)} 을(를) 내려받았습니다</b><ul class="notes">${result.notes.map(n => `<li class="${n.startsWith("⚠") ? "ng" : ""}">${esc(n)}</li>`).join("")}</ul>`}</div>` : ""}
+      <div class="dlg-btns"><button value="cancel" class="btn">닫기</button><button type="button" id="x-go" class="btn primary" ${tpl && !busy ? "" : "disabled"}>${busy ? "만드는 중…" : "📥 채워서 내려받기"}</button></div>
+    </form>`;
+    $("#x-tpl", dlg).onchange = e => { const f = e.target.files[0]; if (f) { picked = { name: f.name, date: Date.now(), blob: f }; result = null; draw(); } };
+    $("#x-go", dlg).onclick = go;
+  };
+  const go = async () => {
+    const tpl = picked || saved; if (!tpl) return;
+    busy = true; result = null; draw();
+    try {
+      const { fillTemplate } = await import("./export-xlsx.js");
+      const D = {
+        ym: S.month.ym, title: S.month.title, site: S.month.site || S.site, mealPrice: Number(S.month.settings.meal_price) || 0,
+        exec: sorted("exec").map(r => r.data),
+        labor: sorted("labor").filter(r => (r.data.name || "").trim()).map(r => ({ ...r.data, name: r.data.name.trim() })),
+        meal: sorted("meal").filter(r => (r.data.name || "").trim()).map(r => r.data),
+        mat: sorted("mat").map(r => r.data),
+        workerOf: p => workerOf({ data: p }),
+      };
+      const out = await fillTemplate(tpl.blob, D);
+      const a = document.createElement("a"); a.href = URL.createObjectURL(out.blob); a.download = outName; a.hidden = true; dlg.append(a); a.click();   // 모달 창 바깥 요소는 비활성이라 창 안에 붙여서 누름
+      setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 60000);
+      if (picked) { await tplStore.set({ name: picked.name, date: Date.now(), blob: picked.blob }); saved = { ...picked }; picked = null; }
+      result = { notes: out.notes };
+    } catch (e) { console.error(e); result = { error: e.message || String(e) }; }
+    busy = false; draw();
+  };
+  draw(); dlg.showModal();
 }
 
 /* ================= 식대 ================= */

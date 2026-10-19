@@ -19,3 +19,6 @@
   미들웨어가 `/__dbtoken` 으로 Vercel 환경변수 `DB_TOKEN` 을 내려 주고, 화면은 이를 `x-pms-token` 헤더로 보냄.
   DB 쪽은 `public.pms_ok()` 가 `private.gate.token` 과 비교(RLS·저장소 정책 모두).
   토큰을 바꾸려면 `DB_TOKEN` 과 `private.gate` 값을 같이 바꾸고 재배포.
+- **엑셀 양식으로 저장** (`jy/export-xlsx.js`): 사용자가 고른 양식 .xlsx(지난달 파일)에서 값 칸만 바꿔 내려받기.
+  서식·병합·인쇄설정·그림·수식은 그대로, 수식 안 단가 숫자만 교체(=SUM(AI5*160000)→…), 시트 간 행 연결(노무비명세서 8행=인건비 5행)에 맞춰 같은 순서로 채움.
+  수식 결과를 다시 계산해 넣고 workbook에 fullCalcOnLoad 표시. 양식 파일은 서버에 올리지 않고 브라우저 IndexedDB에만 기억.

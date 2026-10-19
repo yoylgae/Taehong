@@ -180,3 +180,5 @@ dialog.imp label input,dialog.imp label select{width:auto}
 .st.new{background:#e4f7ea;color:#15803d}
 .ok{color:var(--ok)}.ng{color:var(--danger)}
 label.chk{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:#374151}
+ul.notes{margin:8px 0 0;padding-left:18px;font-size:12.5px;color:#374151;line-height:1.6}
+ul.notes li.ng{color:var(--danger)}
