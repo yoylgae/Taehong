@@ -3,6 +3,7 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 import { SUPABASE_URL, SUPABASE_KEY } from "../config.js";
 import { Cad, ALIAS, polyArea, polyLen } from "./cad.js";
 import { KINDS, kindOf, guessKind } from "./icons.js";
+import { renderMap, drawMarks, viewFor } from "./print.js";
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -414,6 +415,7 @@ function drawDirty() { $("#dirty").textContent = cad.dirty ? `저장 안 한 수
 /* ================= 키보드 ================= */
 addEventListener("keydown", e => {
   const inField = e.target.closest?.("input,textarea,select,dialog");
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "p") { e.preventDefault(); $("#print").click(); return; }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") { e.preventDefault(); if (S.mode === "edit") saveDoc(); return; }
   if (inField) return;
   if (e.key === "Escape" && S.placing) { cancelPlace(); return; }
@@ -457,32 +459,99 @@ $("#bubble-mode").onclick = e => { const b = e.target.closest("button"); if (!b)
 $$("#bubble-mode button").forEach(x => x.classList.toggle("on", x.dataset.b === S.bubble));
 if (inFrame) $("#popout").href = location.pathname; else $("#popout").hidden = true;
 
-/* ================= 그림으로 저장 ================= */
+/* ================= 그림 저장 · 출력 ================= */
+const sortedMarks = () => visibleMarks().slice().sort((a, b) => KINDS.findIndex(k => k.id === a.kind) - KINDS.findIndex(k => k.id === b.kind) || (a.work || "").localeCompare(b.work || ""));
+const dayLabel = () => S.all ? "전체 기간" : `${S.day} (${"일월화수목금토"[new Date(S.day + "T00:00:00").getDay()]})`;
+function scaleBar(g, view, x, y) {
+  const k = cad.settings.mPerDu; if (!k) return;
+  const mpp = k / view.s, nice = [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000];
+  const L = nice.find(n => n / mpp >= 90) || 1000, px = L / mpp;
+  g.fillStyle = "rgba(255,255,255,.9)"; g.fillRect(x - 6, y - 22, px + 46, 30);
+  g.fillStyle = "#111"; g.fillRect(x, y - 4, px / 2, 4); g.strokeStyle = "#111"; g.lineWidth = 1; g.strokeRect(x, y - 4, px, 4);
+  g.font = `600 10px Pretendard, sans-serif`; g.fillText("0", x - 2, y - 8); g.fillText(`${L} m`, x + px - 8, y - 8);
+}
+// 지금 화면 그대로 그림 파일
 $("#shot").onclick = async () => {
-  const W = cad.W, H = cad.H, dpr = Math.max(2, cad.dpr), c = document.createElement("canvas"); c.width = W * dpr; c.height = H * dpr;
-  const g = c.getContext("2d"); const old = cad.editable; cad.editable = false; cad._in = false; cad._draw(); cad.editable = old;
-  g.drawImage(cad.cv, 0, 0, c.width, c.height); g.scale(dpr, dpr);
-  const img = svg => new Promise(r => { const i = new Image(); i.onload = () => r(i); i.onerror = () => r(null); i.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg.replace("<svg ", '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" ')); });
-  // 지시선
-  for (const l of $$("#leaders line")) { g.strokeStyle = l.getAttribute("stroke"); g.lineWidth = 1.6; g.setLineDash(l.getAttribute("stroke-dasharray") ? [4, 3] : []); g.beginPath(); g.moveTo(+l.getAttribute("x1"), +l.getAttribute("y1")); g.lineTo(+l.getAttribute("x2"), +l.getAttribute("y2")); g.stroke(); }
-  g.setLineDash([]);
-  const rr = (x, y, w, h, r) => { g.beginPath(); g.roundRect(x, y, w, h, r); };
-  const pos = el => { const m = /translate\(([-\d.]+)px,\s*([-\d.]+)px\)/.exec(el.style.transform); return m ? [+m[1], +m[2]] : [0, 0]; };
-  for (const [id, o] of els) {
-    const m = S.marks.find(x => x.id === id), k = kindOf(m.kind), [sx, sy] = pos(o.mk);
-    g.fillStyle = "#fff"; g.strokeStyle = k.color; g.lineWidth = 3; g.beginPath(); g.arc(sx, sy - 25, 19, 0, Math.PI * 2); g.fill(); g.stroke();
-    g.fillStyle = k.color; g.beginPath(); g.moveTo(sx - 6, sy - 7); g.lineTo(sx + 6, sy - 7); g.lineTo(sx, sy); g.fill();
-    const im = await img(k.svg.replace(/currentColor/g, k.color)); if (im) g.drawImage(im, sx - 15, sy - 40, 30, 30);
-    if (o.bb.hidden) continue;
-    const [bx, by] = pos(o.bb), h = o.h; let w = o.w;
-    for (const line of o.bb.children) { g.font = line.className === "t1" ? "800 12.5px Pretendard, sans-serif" : "500 12px Pretendard, sans-serif"; w = Math.max(w, g.measureText(line.textContent.trim()).width + 18); } g.fillStyle = "#fff"; g.strokeStyle = k.color; g.lineWidth = 1.5; rr(bx, by, w, h, S.bubble === "short" ? h / 2 : 10); g.fill(); g.stroke();
-    let ty = by + 17; g.textBaseline = "alphabetic";
-    for (const line of o.bb.children) { const cls = line.className; g.font = cls === "t1" ? "800 12.5px Pretendard, sans-serif" : cls === "t2" ? "500 12px Pretendard, sans-serif" : "500 10.5px Pretendard, sans-serif";
-      g.fillStyle = cls === "t1" ? k.color : cls === "t2" ? "#374151" : "#9aa1ad"; g.fillText(line.textContent.trim(), bx + 9, ty); ty += cls === "t1" ? 16 : 15; }
-  }
-  const title = `${S.site || "현장"} · ${S.all ? "전체 기간" : S.day} 장비·작업 배치`;
-  g.font = "700 15px Pretendard, sans-serif"; const tw = g.measureText(title).width; g.fillStyle = "rgba(255,255,255,.92)"; rr(10, 10, tw + 24, 32, 9); g.fill(); g.fillStyle = "#111827"; g.fillText(title, 22, 31);
-  const a = document.createElement("a"); a.href = c.toDataURL("image/png"); a.download = `지적도_${S.all ? "전체" : S.day}.png`; a.click(); cad.render();
+  const W = cad.W, H = cad.H, dpr = Math.max(2, cad.dpr), c = renderMap(cad, W, H, dpr, { ...cad.view }), g = c.getContext("2d");
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  await drawMarks(g, sortedMarks(), (x, y) => cad.toS(x, y), W, H, S.bubble === "off" ? "off" : S.bubble);
+  const title = `${S.site || "현장"} · ${dayLabel()} 장비·작업 배치`;
+  g.font = "700 15px Pretendard, sans-serif"; const tw = g.measureText(title).width; g.fillStyle = "rgba(255,255,255,.92)"; g.beginPath(); g.roundRect(10, 10, tw + 24, 32, 9); g.fill(); g.fillStyle = "#111827"; g.fillText(title, 22, 31);
+  scaleBar(g, cad.view, 20, H - 16);
+  const a = document.createElement("a"); a.href = c.toDataURL("image/png"); a.download = `지적도_${S.all ? "전체" : S.day}.png`; a.click();
+};
+
+const MM = 96 / 25.4, PAPER = { A4: [297, 210], A3: [420, 297] };
+function printOpts() {
+  const f = $("#f-print"), v = n => f.querySelector(`[name=${n}]:checked`)?.value ?? f[n].value;
+  return { title: f.title.value.trim(), range: v("range"), paper: v("paper"), orient: v("orient"), marks: f.marks.value, list: f.list.checked && f.marks.value !== "none" };
+}
+// 한 쪽 전체(여백 안)를 캔버스 하나로: 머리글 + 도면 + 바닥글
+async function composePage(o, dpr) {
+  let [pw, ph] = PAPER[o.paper]; if (o.orient === "portrait") [pw, ph] = [ph, pw];
+  const CW = (pw - 16) * MM, CH = (ph - 16) * MM, HH = 13 * MM, FH = 6 * MM, MW = CW, MH = CH - HH - FH;
+  let b;
+  if (o.range === "all") { const e = cad.extents(), p = Math.max(e[2] - e[0], e[3] - e[1]) * 0.02; b = [e[0] - p, e[1] - p, e[2] + p, e[3] + p]; }
+  else b = [...cad.toW(0, 0), ...cad.toW(cad.W, cad.H)];
+  const view = viewFor(b, MW, MH, 6);
+  const map = renderMap(cad, MW, MH, dpr, view), mg = map.getContext("2d"); mg.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const list = o.marks === "none" ? [] : sortedMarks();
+  await drawMarks(mg, list, (x, y) => [x * view.s + view.ox, y * view.s + view.oy], MW, MH, o.marks === "icon" ? "off" : o.marks, o.list);
+  scaleBar(mg, view, 16, MH - 12);
+  const c = document.createElement("canvas"); c.width = Math.round(CW * dpr); c.height = Math.round(CH * dpr);
+  const g = c.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.fillStyle = "#fff"; g.fillRect(0, 0, CW, CH);
+  g.fillStyle = "#111827"; g.font = `800 ${o.paper === "A3" ? 22 : 18}px Pretendard, "Malgun Gothic", sans-serif`; g.textBaseline = "alphabetic";
+  g.fillText(o.title || "현장 지적도", 0, HH - 16, CW * 0.62);
+  g.font = `500 11px Pretendard, sans-serif`; g.fillStyle = "#4b5563"; g.textAlign = "right";
+  g.fillText(`현장: ${S.site || "-"}   기준일: ${dayLabel()}   장비·작업 ${list.length}건`, CW, HH - 16);
+  g.textAlign = "left"; g.fillStyle = "#111827"; g.fillRect(0, HH - 8, CW, 1.6);
+  g.drawImage(map, 0, HH - 4, MW, MH); g.strokeStyle = "#9ca3af"; g.lineWidth = 0.8; g.strokeRect(0.4, HH - 4 + 0.4, MW - 0.8, MH - 0.8);
+  g.font = `500 9.5px Pretendard, sans-serif`; g.fillStyle = "#6b7280";
+  const now = new Date(); g.fillText(`출력 ${ymd(now)} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")} · 현장관리시스템`, 0, CH - 4);
+  g.textAlign = "right"; g.fillText(cad.settings.mPerDu ? "" : "축척 미설정 (도면 편집 › CAL 로 맞추면 축척 막대가 나옵니다)", CW, CH - 4); g.textAlign = "left";
+  return { canvas: c, pw, ph, list };
+}
+let prevT = 0;
+async function drawPreview() {
+  const t = ++prevT, o = printOpts(), r = await composePage(o, 0.55); if (t !== prevT) return;
+  const box = $("#pr-paper"), maxW = 350, maxH = 300, k = Math.min(maxW / r.pw, maxH / r.ph);
+  box.style.width = r.pw * k + "px"; box.style.height = r.ph * k + "px"; box.style.padding = 8 * k + "px";
+  const cv = $("#pr-cv"); cv.width = r.canvas.width; cv.height = r.canvas.height; cv.getContext("2d").drawImage(r.canvas, 0, 0);
+  $("#pr-info").textContent = `${o.paper} ${o.orient === "landscape" ? "가로" : "세로"} · ${o.range === "all" ? "도면 전체" : "지금 화면 범위"}${o.list ? " · 작업 목록 2쪽" : ""}`;
+}
+$("#print").onclick = () => {
+  const f = $("#f-print");
+  if (!f.title.value) f.title.value = `${S.site || "현장"} 지적도 · ${S.all ? "전체 기간" : S.day} 장비·작업 배치`;
+  $("#dlg-print").showModal(); drawPreview();
+};
+$("#f-print").addEventListener("change", drawPreview);
+$("#f-print").title.addEventListener("input", () => { clearTimeout(drawPreview._t); drawPreview._t = setTimeout(drawPreview, 300); });
+$("#pr-go").onclick = async () => {
+  const btn = $("#pr-go"); btn.disabled = true; btn.textContent = "만드는 중…";
+  try {
+    const o = printOpts(), r = await composePage(o, 2.4);
+    const blob = await new Promise(res => r.canvas.toBlob(res, "image/png"));
+    const url = URL.createObjectURL(blob);
+    const rows = o.list ? r.list.map((m, i) => `<tr><td class="n">${i + 1}</td><td><b style="color:${kindOf(m.kind).color}">${esc(kindOf(m.kind).id)}</b></td><td>${esc(m.name || "")}</td><td>${esc(m.work || "")}</td><td>${esc(m.company || "")}</td><td>${esc([m.manager, m.phone].filter(Boolean).join(" "))}</td><td class="d">${esc(m.date_from === m.date_to ? m.date_from || "" : `${m.date_from || ""} ~ ${m.date_to || ""}`)}</td><td>${esc(m.memo || "")}</td></tr>`).join("") : "";
+    const html = `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>${esc(o.title)}</title>
+      <style>@page{size:${o.paper} ${o.orient};margin:8mm}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+      body{margin:0;font-family:Pretendard,"Malgun Gothic",sans-serif;color:#111827}
+      img{display:block;width:${r.pw - 16}mm;height:${r.ph - 16}mm}
+      .p2{page-break-before:always}.p2 h2{font-size:15pt;margin:0 0 3mm}.p2 p{margin:0 0 3mm;color:#555;font-size:9pt}
+      table{width:100%;border-collapse:collapse;font-size:9pt}th,td{border:.25mm solid #9ca3af;padding:1.6mm 2mm;text-align:left;vertical-align:top}
+      th{background:#f1f5f9;font-weight:700}td.n{text-align:center;width:8mm;font-weight:700}td.d{white-space:nowrap}</style></head>
+      <body><img src="${url}">${o.list ? `<section class="p2"><h2>작업 목록</h2><p>${esc(o.title)} · 기준일 ${esc(dayLabel())} · ${r.list.length}건 (번호는 1쪽 지도 표시 번호)</p>
+      <table><thead><tr><th>번호</th><th>종류</th><th>장비명·호기</th><th>작업 내용</th><th>업체</th><th>담당·연락처</th><th>기간</th><th>메모</th></tr></thead><tbody>${rows || `<tr><td colspan="8" style="text-align:center;color:#888">작업이 없습니다</td></tr>`}</tbody></table></section>` : ""}</body></html>`;
+    let fr = $("#print-frame"); fr?.remove();
+    fr = document.createElement("iframe"); fr.id = "print-frame"; fr.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden";
+    document.body.append(fr);
+    fr.contentDocument.open(); fr.contentDocument.write(html); fr.contentDocument.close();
+    await new Promise(res => { const im = fr.contentDocument.querySelector("img"); if (im.complete) res(); else im.onload = res; });
+    $("#dlg-print").close();
+    fr.contentWindow.focus(); fr.contentWindow.print();
+    setTimeout(() => URL.revokeObjectURL(url), 120000);
+  } catch (e) { console.error(e); toast("출력 준비 실패: " + (e.message || e), 5000); }
+  finally { btn.disabled = false; btn.textContent = "🖨 인쇄하기"; }
 };
 
 /* ================= 저장 ================= */
