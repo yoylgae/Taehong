@@ -19,6 +19,7 @@ export const SHEETS = [
   { id: "meal",   name: "식대" },
   { id: "labor",  name: "인건비" },
   { id: "pay",    name: "노무비명세서" },
+  { id: "contract", name: "근로계약서" },
   { id: "people", name: "신분증·이수증·통장사본" },
   { id: "mat",    name: "자재구입" },
   { id: "photo",  name: "자재 사진대지" },
@@ -118,7 +119,7 @@ async function loadMonth(id) {
     sb.from("jy_months").select("*").eq("id", id).maybeSingle(),
     sb.from("jy_rows").select("*").eq("month_id", id).order("sort"),
     sb.from("jy_workers").select("*").order("name"),
-    sb.from("jy_files").select("*").or(`month_id.eq.${id},sheet.eq.id`).order("sort"),
+    sb.from("jy_files").select("*").or(`month_id.eq.${id},sheet.in.(id,tpl-contract)`).order("sort"),
   ]);
   if (m.error || !m.data) throw m.error || new Error("없는 달입니다");
   S.month = m.data;
@@ -241,7 +242,7 @@ function renderMonth() {
 }
 function renderSheet() {
   S.calc = null;
-  ({ exec: rExec, labor: rLabor, meal: rMeal, pay: rPay, people: rPeople, mat: rMat, photo: rPhoto, doc: rDoc })[S.sheet]();
+  ({ exec: rExec, labor: rLabor, meal: rMeal, pay: rPay, contract: rContract, people: rPeople, mat: rMat, photo: rPhoto, doc: rDoc })[S.sheet]();
   S.calc?.();
 }
 async function deleteMonth() {
@@ -742,6 +743,132 @@ function rPay() {
   };
   $("#p-clear").onclick = () => { if (!confirm("모든 사람의 공제 금액을 비울까요?")) return; rows.forEach(r => { r.data.ded = {}; mark("rows", r); }); rPay(); S.calc(); };
   $("#p-print").onclick = () => P.printPay(S.month, rows, workerOf);
+}
+
+/* ================= 근로계약서 ================= */
+// 계약서 양식(.xlsx)은 비공개 저장소에 올려 두고 모든 달에서 같이 씀. 소속마다 어떤 양식 시트를 쓸지 정함.
+const ctCache = {};   // 파일 id → { blob, sheets }
+async function ctLoad(f) {
+  if (ctCache[f.id]) return ctCache[f.id];
+  const url = S.urls[f.path] || (await sb.storage.from(BUCKET).createSignedUrl(f.path, 3600)).data?.signedUrl;
+  const blob = await (await fetch(url)).blob();
+  const { inspectTemplate } = await import("./contract.js");
+  return (ctCache[f.id] = { blob, sheets: await inspectTemplate(blob) });
+}
+const ctFiles = () => S.files.filter(f => f.sheet === "tpl-contract").sort((a, b) => a.sort - b.sort);
+function ctSettings() {
+  const { y, m } = ymParts(S.month.ym), last = lastDay(S.month.ym), mm = String(m).padStart(2, "0");
+  const c = (S.month.settings.contract ||= {});
+  c.teams ||= {};
+  // 기간은 달이 바뀌면 그 달로 (새 달로 복사된 설정의 기간이 다른 달이면 다시 맞춤)
+  if (!c.start || !c.start.startsWith(S.month.ym)) { c.start = `${y}-${mm}-01`; c.end = `${y}-${mm}-${last}`; }
+  return c;
+}
+async function rContract() {
+  const c = ctSettings(), files = ctFiles();
+  const labor = sorted("labor").filter(r => (r.data.name || "").trim());
+  const teams = [...new Set(labor.map(r => (r.data.team || "").trim() || "(소속 없음)"))];
+  $("#sheet").innerHTML = `<p class="muted pad">계약서 양식을 읽는 중…</p>`;
+  const loaded = [];
+  for (const f of files) { try { loaded.push({ f, ...(await ctLoad(f)) }); } catch (e) { console.error(e); loaded.push({ f, sheets: [], error: e.message }); } }
+  if (S.sheet !== "contract") return;
+  const opts = loaded.flatMap(({ f, sheets }) => sheets.map(sh => ({ key: f.id + "|" + sh.sheet, label: `${f.name.replace(/\.xlsx$/i, "")} › ${sh.sheet.trim()}${sh.company ? ` (${sh.company})` : ""}`, sh })));
+  // 소속별 기본 양식: 견본 직종·공종에 소속 이름이 들어 있으면 그것, 아니면 견본이 채워진 '지디' 양식
+  const guess = t => (opts.find(o => t && (o.sh.job + o.sh.work).includes(t)) || opts.find(o => /지디/.test(o.sh.company) && o.sh.sample) || opts[0])?.key || "";
+  teams.forEach(t => { const st = (c.teams[t] ||= {}); if (!st.tpl || !opts.some(o => o.key === st.tpl)) st.tpl = guess(t); });
+  const sel = S.ctSel ||= {};
+  const daysOf = r => sumObj(r.data.d);
+  labor.forEach(r => { if (sel[r.id] == null) sel[r.id] = daysOf(r) > 0; });
+  const optFor = t => opts.find(o => o.key === c.teams[t]?.tpl);
+  $("#sheet").innerHTML = `
+    <div class="bar">
+      <label class="btn up">📎 계약서 양식 올리기 (.xlsx)<input type="file" accept=".xlsx" id="ct-up" multiple></label>
+      ${loaded.map(({ f, sheets, error }) => `<span class="chip-f" title="${esc(sheets.map(s => s.sheet.trim()).join(", "))}">${esc(f.name)} <small>${error ? "읽기 실패" : sheets.length + "개 양식"}</small><button class="x" data-ctdel="${f.id}" title="양식 삭제">✕</button></span>`).join("") || '<span class="muted" style="font-size:13px">먼저 근로계약서 양식 엑셀을 올려 주세요 (여러 회사 양식이 시트로 들어 있어도 됩니다).</span>'}
+      <span class="grow"></span>
+      <button class="btn primary" id="ct-go" ${opts.length ? "" : "disabled"}>📄 근로계약서 만들기</button>
+    </div>
+    <div class="ct-grid">
+      <div class="card ct-card"><h4>계약 조건</h4>
+        <div class="ct-form">
+          <label>계약기간 <span><input type="date" id="ct-start" value="${esc(c.start)}"> ~ <input type="date" id="ct-end" value="${esc(c.end)}"></span></label>
+          <label>임금 지급일 <span>매월 <input id="ct-pay" value="${esc(c.payday ?? "")}" style="width:56px" placeholder="15"> 일 <small class="muted">(비우면 양식 그대로)</small></span></label>
+        </div>
+        <p class="hint">일당은 인건비 탭의 단가, 성명·주민번호·주소·전화·통장은 신분증·이수증·통장사본 탭의 인적사항이 들어갑니다. 통장은 양식에 계좌 칸이 채워져 있던 경우에만 넣습니다.</p>
+      </div>
+      <div class="card ct-card"><h4>소속별 양식</h4>
+        <table class="t imp-t ct-teams"><thead><tr><th>소속</th><th>양식</th><th>근로장소</th><th>공종/수행업무</th><th>소속팀장</th><th>직종</th></tr></thead><tbody>
+        ${teams.map(t => { const st = c.teams[t] || {}, o = optFor(t); const ph = k => o ? `양식대로: ${o.sh[k] || "(빈칸)"}` : "";
+          return `<tr><td class="c"><b>${esc(t)}</b></td>
+            <td><select data-ct="${esc(t)}" data-k="tpl">${opts.map(x => `<option value="${esc(x.key)}" ${x.key === st.tpl ? "selected" : ""}>${esc(x.label)}</option>`).join("") || "<option>양식 없음</option>"}</select></td>
+            ${["place", "work", "leader", "job"].map(k => `<td><input data-ct="${esc(t)}" data-k="${k}" value="${esc(st[k] || "")}" placeholder="${esc(ph(k))}"></td>`).join("")}</tr>`; }).join("")}
+        </tbody></table>
+        <p class="hint">칸을 비워 두면 양식에 적힌 값을 그대로 씁니다.</p>
+      </div>
+    </div>
+    <div class="bar" style="margin-top:12px"><b>근로자</b><label><input type="checkbox" id="ct-all"> 전체 선택</label><span class="muted" style="font-size:12px">출역이 있는 사람은 자동으로 골라 둡니다.</span><span class="grow"></span><span class="sum-chip"><span id="ct-n"></span>명 선택</span></div>
+    <div class="scroll"><table class="t">
+      <thead><tr><th style="width:40px"></th><th>성명</th><th>소속</th><th>양식</th><th>공수</th><th>일당(단가)</th><th>금액</th><th>주민번호</th><th>주소</th><th>전화</th><th>통장</th></tr></thead>
+      <tbody>${labor.map(r => { const w = workerOf(r), d = daysOf(r), t = (r.data.team || "").trim() || "(소속 없음)", o = optFor(t);
+        const ok = v => v ? '<span class="ok">✓</span>' : '<span class="ng">없음</span>';
+        return `<tr><td class="c"><input type="checkbox" data-ctp="${r.id}" ${sel[r.id] ? "checked" : ""}></td><td class="c"><b>${esc(r.data.name)}</b></td><td class="c">${esc(t)}</td>
+          <td style="font-size:12px;padding:4px 8px">${o ? esc(o.sh.sheet.trim()) : '<span class="ng">양식 없음</span>'}</td>
+          <td class="c">${d || ""}</td><td class="n" style="padding:4px 8px">${fmt0(r.data.rate)}</td><td class="n" style="padding:4px 8px">${fmt0(d * (Number(r.data.rate) || 0))}</td>
+          <td class="c">${ok(w?.rrn)}</td><td class="c">${ok(w?.address)}</td><td class="c">${ok(w?.phone)}</td><td class="c">${w?.bank ? '<span class="ok">✓</span>' : '<span class="muted">-</span>'}</td></tr>`; }).join("")
+        || `<tr><td colspan="11" class="c muted" style="padding:30px">인건비 탭에 명단이 없습니다.</td></tr>`}</tbody></table></div>`;
+  const count = () => { const n = labor.filter(r => sel[r.id]).length; $("#ct-n").textContent = n; $("#ct-all").checked = n === labor.length && n > 0; };
+  count();
+  $$("[data-ctp]").forEach(el => el.onchange = () => { sel[el.dataset.ctp] = el.checked; count(); });
+  $("#ct-all").onchange = e => { labor.forEach(r => sel[r.id] = e.target.checked); $$("[data-ctp]").forEach(el => el.checked = e.target.checked); count(); };
+  $("#ct-start").onchange = e => { c.start = e.target.value; mark("month"); };
+  $("#ct-end").onchange = e => { c.end = e.target.value; mark("month"); };
+  $("#ct-pay").onchange = e => { c.payday = e.target.value.replace(/\D/g, ""); mark("month"); };
+  $$("[data-ct]").forEach(el => el.onchange = () => { (c.teams[el.dataset.ct] ||= {})[el.dataset.k] = el.value.trim(); mark("month"); if (el.dataset.k === "tpl") rContract(); });
+  $("#ct-up").onchange = async e => {
+    const fs = [...e.target.files]; e.target.value = "";
+    for (const file of fs) {
+      const path = `templates/contract/${uid()}.xlsx`;
+      const { error } = await sb.storage.from(BUCKET).upload(path, file, { contentType: file.type || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      if (error) { toast("올리지 못했습니다: " + error.message); continue; }
+      const row = { id: uid(), month_id: null, worker_id: null, sheet: "tpl-contract", grp: "", sort: Date.now() % 1e9, path, name: file.name, caption: {} };
+      const { error: e2 } = await sb.from("jy_files").insert(row);
+      if (e2) { toast("저장하지 못했습니다: " + e2.message); continue; }
+      S.files.push(row); ctCache[row.id] = { blob: file, sheets: await (await import("./contract.js")).inspectTemplate(file) };
+    }
+    rContract();
+  };
+  $$("[data-ctdel]").forEach(b => b.onclick = async e => {
+    e.stopPropagation(); const f = S.files.find(x => x.id === b.dataset.ctdel); if (!f || !confirm(`계약서 양식 「${f.name}」을(를) 지울까요? (모든 달에서 지워집니다)`)) return;
+    await sb.storage.from(BUCKET).remove([f.path]); await sb.from("jy_files").delete().eq("id", f.id);
+    S.files = S.files.filter(x => x.id !== f.id); delete ctCache[f.id]; rContract();
+  });
+  $("#ct-go").onclick = async () => {
+    await flush();
+    const pick = labor.filter(r => sel[r.id]); if (!pick.length) return toast("근로자를 골라 주세요.");
+    const groups = {};
+    for (const r of pick) { const t = (r.data.team || "").trim() || "(소속 없음)", key = c.teams[t]?.tpl; if (!key) return toast(`${t} 소속의 양식을 골라 주세요.`); (groups[key] ||= { teams: new Set(), rows: [] }).rows.push(r); groups[key].teams.add(t); }
+    const { buildContracts } = await import("./contract.js");
+    const btn = $("#ct-go"); btn.disabled = true; btn.textContent = "만드는 중…";
+    const months = Math.max(1, Math.round((new Date(c.end) - new Date(c.start)) / 2.6e9));
+    const miss = [];
+    try {
+      for (const [key, g] of Object.entries(groups)) {
+        const [fid, ...rest] = key.split("|"), sheetName = rest.join("|"), o = opts.find(x => x.key === key);
+        const people = g.rows.map(r => {
+          const w = workerOf(r) || {}; if (!w.rrn) miss.push(r.data.name);
+          const st = c.teams[(r.data.team || "").trim() || "(소속 없음)"] || {};
+          const o = {}; for (const k of ["place", "work", "leader", "job"]) if (st[k]) o[k] = st[k];
+          return { name: r.data.name.trim(), rrn: w.rrn || "", address: w.address || "", phone: w.phone || "", bank: w.bank || "", rate: Number(r.data.rate) || 0, o };
+        });
+        const out = await buildContracts(ctCache[fid].blob, sheetName, people, { start: c.start, end: c.end, months, payday: c.payday || "" });
+        const { m } = ymParts(S.month.ym);
+        const label = (o?.sh.company || sheetName.trim()).replace(/[㈜()\s]|주식회사/g, "");
+        const a = document.createElement("a"); a.href = URL.createObjectURL(out.blob); a.download = `근로계약서_${label}_${[...g.teams].join("·")}_${m}월_${people.length}명.xlsx`; a.hidden = true; document.body.append(a); a.click();
+        setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 60000);
+      }
+      toast(`근로계약서 ${pick.length}명분을 만들었습니다 (한 사람에 한 시트).` + (miss.length ? ` 주민번호 없는 사람: ${miss.join(", ")}` : ""));
+    } catch (e) { console.error(e); toast("만들지 못했습니다: " + (e.message || e)); }
+    btn.disabled = false; btn.textContent = "📄 근로계약서 만들기";
+  };
 }
 
 /* ================= 신분증·이수증·통장사본 (사람 인적사항) ================= */

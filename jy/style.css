@@ -187,3 +187,15 @@ table.t td.calc.auto small{margin-left:4px;font-size:10px;color:#15803d;backgrou
 dialog.rules{width:min(96vw,760px)}
 dialog.rules td{padding:4px 6px}
 dialog.rules td input,dialog.rules td select{border:1px solid var(--line)!important;border-radius:6px!important;padding:4px 6px!important;width:auto}
+/* 근로계약서 */
+.ct-grid{display:grid;grid-template-columns:minmax(300px,380px) 1fr;gap:12px}
+.ct-card{padding:14px 16px}
+.ct-card h4{margin:0 0 10px;font-size:14px}
+.ct-form{display:flex;flex-direction:column;gap:10px;font-size:13px}
+.ct-form label{display:flex;justify-content:space-between;align-items:center;gap:8px;color:#374151}
+.ct-teams td{padding:3px 4px}
+.ct-teams td input,.ct-teams td select{border:1px solid var(--line)!important;border-radius:6px!important;padding:5px 6px!important;font-size:12.5px}
+.ct-teams td select{max-width:260px}
+.chip-f{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:99px;padding:3px 4px 3px 12px;font-size:12.5px;background:#fff}
+.chip-f small{color:var(--soft)}
+@media (max-width:1100px){.ct-grid{grid-template-columns:1fr}}

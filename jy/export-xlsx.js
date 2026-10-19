@@ -41,6 +41,14 @@ async function readZip(buf) {
     text: async n => { const b = await bytes(n); return b ? dec.decode(b) : null; },
     put: (n, str) => { const e = byName[n]; if (!e) throw new Error("없는 파일: " + n); e.repl = new TextEncoder().encode(str); },
     remove: n => { const i = entries.findIndex(e => e.name === n); if (i >= 0) { entries.splice(i, 1); delete byName[n]; } },
+    bytes,
+    // 새 파일 추가 (글자 또는 바이트)
+    add: (n, data) => {
+      const nb = new TextEncoder().encode(n), d = new Date();
+      const e = { flag: 0, method: 8, time: (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1), date: ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate(),
+        crc: 0, csize: 0, usize: 0, nameBytes: nb, name: n, raw: new Uint8Array(0), repl: typeof data === "string" ? new TextEncoder().encode(data) : data };
+      entries.push(e); byName[n] = e;
+    },
   };
 }
 
@@ -531,4 +539,4 @@ export async function fillTemplate(file, D) {
   notes.push("그림이 들어가는 시트(신분증·이수증·통장사본, 자재 사진대지, 거래명세표·장비·주유 등)는 고른 양식 파일 그대로입니다.");
   return { blob: await book.save(), notes, sheets: book.names };
 }
-export { shiftFormula as _shiftFormula };
+export { shiftFormula as _shiftFormula, openBook, Calc, Sheet, readZip, writeZip, colNum, colName, splitRef, NS };
