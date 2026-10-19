@@ -355,6 +355,16 @@ function bindRowOps(sheet, rerender) {
   $("#sheet").onclick = async e => {
     const b = e.target.closest("button"); if (!b) return;
     if (b.dataset.del) { const r = findRow(b.dataset.del); const label = r?.data.name || r?.data.vendor || r?.data.item || ""; if (!confirm(`${label ? `「${label}」 ` : ""}행을 지울까요?`)) return; await delRow(sheet, b.dataset.del); rerender(); S.calc?.(); }
+    else if (b.dataset.full) {
+      // 만근: 일요일을 뺀 이 달 모든 날을 1로 (이미 적힌 0.5 등도 1로 바뀜)
+      const r = findRow(b.dataset.full); if (!r) return;
+      const ym = S.month.ym, last = lastDay(ym), d = {};
+      for (let k = 1; k <= last; k++) if (wday(ym, k) !== 0) d[k] = 1;
+      const had = sumObj(r.data.d);
+      if (had && !confirm(`「${r.data.name || "이 사람"}」의 출역일(${had}일)을 만근(${Object.keys(d).length}일, 일요일 제외)으로 바꿀까요?`)) return;
+      r.data.d = d; mark("rows", r); rerender(); S.calc?.();
+      toast(`${r.data.name || ""} 만근 ${Object.keys(d).length}일로 채웠습니다.`);
+    }
     else if (b.dataset.up) { moveRow(sheet, b.dataset.up, -1); rerender(); S.calc?.(); }
     else if (b.dataset.dn) { moveRow(sheet, b.dataset.dn, 1); rerender(); S.calc?.(); }
   };
@@ -405,7 +415,7 @@ function rLabor() {
       <button class="btn" id="l-print">🖨 인쇄</button>
     </div>
     <div class="scroll"><table class="t fit">
-      <thead><tr><th class="stick" style="left:0;width:38px">번호</th><th style="width:62px">소속</th><th style="width:78px">성명</th><th style="width:84px" title="단가 규칙을 정하는 구분 (직영·드림인력 …)">구분</th><th style="width:84px">단가</th>${dayHead(ym, n)}<th style="width:52px">출역<br>일수</th><th style="width:96px">금액</th><th style="width:120px">비고</th><th style="width:76px"></th></tr></thead>
+      <thead><tr><th class="stick" style="left:0;width:38px">번호</th><th style="width:62px">소속</th><th style="width:78px">성명</th><th style="width:84px" title="단가 규칙을 정하는 구분 (직영·드림인력 …)">구분</th><th style="width:84px">단가</th>${dayHead(ym, n)}<th style="width:52px">출역<br>일수</th><th style="width:96px">금액</th><th style="width:120px">비고</th><th style="width:118px"></th></tr></thead>
       <tbody>${rows.map((r, i) => `<tr>
         <td class="idx stick">${i + 1}</td><td>${inp("rows", r, "data.team", { cls: "mw", ph: "소속" }).replace("<input", '<input list="dl-teams"')}</td>
         <td>${inp("rows", r, "data.name", { cls: "mw" }).replace("<input", '<input list="dl-workers"')}</td><td>${inp("rows", r, "data.group", { cls: "mw mw2", ph: "구분" }).replace("<input", '<input list="dl-groups"')}</td>
@@ -413,7 +423,7 @@ function rLabor() {
         ${Array.from({ length: n }, (_, k) => dcell(r, "d", k + 1, ym)).join("")}
         <td class="calc" data-calc="l-d-${r.id}" style="text-align:center"></td><td class="calc" data-calc="l-a-${r.id}"></td>
         <td>${inp("rows", r, "data.memo", { cls: "mw" })}</td>
-        <td class="del"><button class="x" data-up="${r.id}">▲</button><button class="x" data-dn="${r.id}">▼</button><button class="x" data-del="${r.id}">✕</button></td></tr>`).join("")
+        <td class="del del-w"><button class="x mg" data-full="${r.id}" title="만근: 일요일을 뺀 이 달 모든 날 1">만근</button><button class="x" data-up="${r.id}">▲</button><button class="x" data-dn="${r.id}">▼</button><button class="x" data-del="${r.id}">✕</button></td></tr>`).join("")
         || `<tr><td colspan="${n + 9}" class="c muted" style="padding:30px">명단이 없습니다. <b>+ 인원 추가</b>로 시작하세요.</td></tr>`}</tbody>
       <tfoot><tr><td class="stick"></td><td colspan="4" class="c">일별 인원 / 합계</td>${Array.from({ length: n }, (_, k) => `<td class="dsum" data-calc="l-s-${k + 1}"></td>`).join("")}<td class="c" data-calc="l-days"></td><td class="n" data-calc="l-amt"></td><td colspan="2"></td></tr></tfoot>
     </table></div>
