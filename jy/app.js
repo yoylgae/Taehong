@@ -365,10 +365,10 @@ const focusLast = () => { const el = $$("#sheet tbody tr:last-child [data-f]")[0
 // tier: 출역 min일 이상이면 hi, 아니면 lo / fixed: 항상 rate / 규칙이 없는 소속은 사람마다 직접 입력
 const DEFAULT_RULES = [
   { team: "드림인력", type: "tier", min: 8, hi: 170000, lo: 160000 },
-  { team: "신호수", type: "fixed", rate: 160000 },
+  { team: "직영", type: "fixed", rate: 160000 },
 ];
 const rules = () => (S.month.settings.rateRules ||= DEFAULT_RULES.map(r => ({ ...r })));
-const ruleOf = grp => rules().find(x => x.team && x.team === (grp || "").trim()) || null;   // 규칙은 '구분'(드림인력·신호수 …) 기준
+const ruleOf = grp => rules().find(x => x.team && x.team === (grp || "").trim()) || null;   // 규칙은 '구분'(드림인력·직영 …) 기준
 const TEAMS = ["지디", "비계"];
 const ruleRate = (rule, days) => rule.type === "fixed" ? Number(rule.rate) || 0 : days >= (Number(rule.min) || 0) ? Number(rule.hi) || 0 : Number(rule.lo) || 0;
 const ruleText = r => r.type === "fixed" ? `${fmt0(r.rate)}원 고정` : `${r.min}일 이상 ${fmt0(r.hi)}원 · 미만 ${fmt0(r.lo)}원`;
@@ -377,6 +377,16 @@ function applyRates(list = S.rows.labor) {
   let n = 0;
   list.forEach(r => { const rule = ruleOf(r.data.group); if (!rule) return; const v = ruleRate(rule, sumObj(r.data.d)); if (Number(r.data.rate) !== v) { r.data.rate = v; mark("rows", r); n++; } });
   return n;
+}
+
+// 인건비 정렬: 구분 직영 → 건하이엔지 → 드림인력 → 비계 → (그 밖) → (빈칸), 같은 구분 안에서는 이름 가나다순
+const GROUP_ORDER = ["직영", "건하이엔지", "드림인력", "비계"];
+function sortLabor() {
+  const rank = g => { g = (g || "").trim(); const i = GROUP_ORDER.indexOf(g); return i >= 0 ? i : g ? GROUP_ORDER.length : GROUP_ORDER.length + 1; };
+  const list = sorted("labor");
+  list.sort((a, b) => rank(a.data.group) - rank(b.data.group) || (a.data.group || "").localeCompare(b.data.group || "", "ko")
+    || (a.data.name || "").trim().localeCompare((b.data.name || "").trim(), "ko") || a.sort - b.sort);
+  list.forEach((r, k) => { if (r.sort !== k + 1) { r.sort = k + 1; mark("rows", r); } });
 }
 
 /* ================= 인건비 (인력 출력 현황) ================= */
@@ -388,14 +398,14 @@ function rLabor() {
     <div class="bar">
       <button class="btn primary" id="l-add">+ 인원 추가</button>
       <label class="btn up" title="업체(인력사무소·협력사)에서 받은 정산 엑셀을 올리면 출역일·공수·단가를 자동으로 채웁니다">📥 업체 정산 엑셀 불러오기<input type="file" accept=".xlsx" multiple id="l-imp"></label>
-      <button class="btn" id="l-sort">소속순 정렬</button>
+      <button class="btn" id="l-sort" title="구분(직영 → 건하이엔지 → 드림인력 → 비계) 순서, 같은 구분 안에서는 이름 가나다순">정렬</button>
       <button class="btn" id="l-rules" title="${esc(rules().map(r => `${r.team}: ${ruleText(r)}`).join("\n"))}">⚙ 단가 규칙</button>
       <span class="muted" style="font-size:12px">날짜 칸을 누르면 <b style="color:#1e40af">1</b> → <b style="color:#b45309">0.5</b> → 빈칸 순서로 바뀝니다.</span>
       <span class="grow"></span><span class="sum-chip">출역 <span data-calc="l-days"></span>일 · <span data-calc="l-amt"></span>원</span>
       <button class="btn" id="l-print">🖨 인쇄</button>
     </div>
     <div class="scroll"><table class="t fit">
-      <thead><tr><th class="stick" style="left:0;width:38px">번호</th><th style="width:62px">소속</th><th style="width:78px">성명</th><th style="width:84px" title="단가 규칙을 정하는 구분 (드림인력·신호수 …)">구분</th><th style="width:84px">단가</th>${dayHead(ym, n)}<th style="width:52px">출역<br>일수</th><th style="width:96px">금액</th><th style="width:120px">비고</th><th style="width:76px"></th></tr></thead>
+      <thead><tr><th class="stick" style="left:0;width:38px">번호</th><th style="width:62px">소속</th><th style="width:78px">성명</th><th style="width:84px" title="단가 규칙을 정하는 구분 (직영·드림인력 …)">구분</th><th style="width:84px">단가</th>${dayHead(ym, n)}<th style="width:52px">출역<br>일수</th><th style="width:96px">금액</th><th style="width:120px">비고</th><th style="width:76px"></th></tr></thead>
       <tbody>${rows.map((r, i) => `<tr>
         <td class="idx stick">${i + 1}</td><td>${inp("rows", r, "data.team", { cls: "mw", ph: "소속" }).replace("<input", '<input list="dl-teams"')}</td>
         <td>${inp("rows", r, "data.name", { cls: "mw" }).replace("<input", '<input list="dl-workers"')}</td><td>${inp("rows", r, "data.group", { cls: "mw mw2", ph: "구분" }).replace("<input", '<input list="dl-groups"')}</td>
@@ -421,7 +431,7 @@ function rLabor() {
     setCalc("l-days", td); setCalc("l-amt", fmt0(ta));
   };
   $("#l-add").onclick = () => { const last = sorted("labor").at(-1); newRow("labor", { team: last?.data.team || "지디", group: last?.data.group || "", name: "", rate: last?.data.rate ?? null, d: {}, ded: {}, memo: "" }); rLabor(); S.calc(); focusLast(); };
-  $("#l-sort").onclick = () => { const list = sorted("labor"); const order = [...new Set(list.map(r => r.data.team || ""))]; list.sort((a, b) => order.indexOf(a.data.team || "") - order.indexOf(b.data.team || "") || a.sort - b.sort).forEach((r, k) => { r.sort = k + 1; mark("rows", r); }); rLabor(); S.calc(); };
+  $("#l-sort").onclick = () => { sortLabor(); rLabor(); S.calc(); toast("구분 → 이름 순으로 정렬했습니다."); };
   $("#l-print").onclick = () => P.printLabor(S.month, sorted("labor"));
   $("#l-rules").onclick = rulesDialog;
   $("#l-imp").onchange = e => { const fs = [...e.target.files]; e.target.value = ""; if (fs.length) vendorImport(fs); };
@@ -593,6 +603,7 @@ async function vendorImport(files) {
       }
     }
     const rc = applyRates();
+    sortLabor();
     await flush();
     renderMonthKeepScroll();
     toast((rc ? `단가 규칙으로 ${rc}명 단가 조정 · ` : "") + `인건비 ${upd}명 갱신 · ${add}명 추가` + (fillWorkers ? ` / 인적사항 ${wAdd}명 추가 · ${wFill}명 보완` : "") + " — 실행내역서 탭의 '인건비 금액 반영'으로 금액도 맞출 수 있습니다.");
