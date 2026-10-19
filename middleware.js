@@ -39,7 +39,14 @@ export default async function middleware(request) {
     return loginPage(to, true);
   }
 
-  if (readCookie(request, COOKIE) === good) return next();
+  if (readCookie(request, COOKIE) === good) {
+    // 직영실행 등 민감 자료용 DB 토큰: 비밀번호를 통과한 사람에게만 내려줌
+    if (url.pathname === "/__dbtoken") {
+      return new Response(JSON.stringify({ t: process.env.DB_TOKEN || "" }), {
+        headers: { "content-type": "application/json", "cache-control": "no-store" } });
+    }
+    return next();
+  }
 
   // 페이지가 아닌 파일(스크립트·그림 등) 요청은 401 만 돌려줌
   const wantsHtml = (request.headers.get("accept") || "").includes("text/html");

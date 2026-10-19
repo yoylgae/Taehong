@@ -14,6 +14,7 @@ const store = { get(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? 
    newWindow: true 를 붙이면 탭 대신 새 창으로 열림                                    */
 const MENUS = [
   { name: "공사관리", items: [
+    { id: "jy", name: "직영실행", icon: "📒", url: "jy/" },
     { id: "waste", name: "폐기물 반출 현황", icon: "🚛", url: "https://meko-gdenc.vercel.app/", newWindow: true },
   ] },
   { name: "안전보건관리", items: [
