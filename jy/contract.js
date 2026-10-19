@@ -62,59 +62,67 @@ function locate(sh) {
 function fillOne(sh, P, O) {
   const f = locate(sh);
   const get = p => { if (!p) return ""; const v = sh.raw(p.c, p.r); return v == null ? "" : String(v); };   // 앞뒤 공백까지 그대로
-  const put = (p, v) => { if (!p || v == null || v === "") return; if (sh.formula(p.c, p.r) != null) return; sh.set(p.c, p.r, v, sh.cell(p.c, p.r)); };
+  const rich = p => sh.runs(p.c, p.r).some(x => x.rPr);
+  // 칸 전체 바꾸기: 서식 있는 글자 칸이면 첫 조각의 서식을 이어받음
+  const replaceAll = (p, v) => {
+    if (!p || sh.formula(p.c, p.r) != null) return;
+    if (v == null || v === "") { sh.set(p.c, p.r, null); return; }
+    if (rich(p)) sh.editText(p.c, p.r, e => e.replace(/^[\s\S]*$/, () => String(v)));
+    else sh.set(p.c, p.r, typeof v === "number" ? v : String(v), sh.cell(p.c, p.r));
+  };
+  const put = (p, v) => { if (p && v != null && v !== "") replaceAll(p, v); };
   const sample = { name: get(f.name).trim(), rrn: get(f.rrn).trim(), addr: get(f.addr).trim(), tel: get(f.tel).trim() };
   const done = new Set();
   const mark = p => p && done.add(p.c + "," + p.r);
 
   // 사람 정보는 비어 있어도 덮어씀 (견본 근로자 정보가 남지 않도록)
-  const putAlways = (p, v) => { if (!p || sh.formula(p.c, p.r) != null) return; sh.set(p.c, p.r, v || null, sh.cell(p.c, p.r)); };
-  putAlways(f.name, P.name); putAlways(f.rrn, P.rrn); putAlways(f.addr, P.address); putAlways(f.tel, P.phone);
+  replaceAll(f.name, P.name); replaceAll(f.rrn, P.rrn); replaceAll(f.addr, P.address); replaceAll(f.tel, P.phone);
   [f.name, f.rrn, f.addr, f.tel].forEach(mark);
   for (const k of ["place", "work", "leader", "job"]) if (O[k]) { put(f[k], O[k]); mark(f[k]); }
   if (f.wage && P.rate) { if (sh.formula(f.wage.c, f.wage.r) == null) sh.set(f.wage.c, f.wage.r, Number(P.rate), sh.cell(f.wage.c, f.wage.r)); mark(f.wage); }
   // 계약기간: 양식의 날짜 모양(2026 . 09 . 01 . / 2026.09.01)을 그대로 따름
   const setDate = (p, d) => {
     if (!p || !d) return; const t = get(p); const [y, m, dd] = d.split("-");
-    const re = /(\d{2,4})(\s*\.\s*)(\d{0,2})(\s*\.\s*)(\d{0,2})/;
-    let v;
-    if (/\d{4}\s*\.\s*\d{1,2}\s*\.\s*\d{1,2}/.test(t)) v = t.replace(/(\d{4})(\s*\.\s*)(\d{1,2})(\s*\.\s*)(\d{1,2})/, (_, a, s1, b, s2) => `${y}${s1}${m}${s2}${dd}`);
-    else if (re.test(t)) v = t.replace(/20\s*\.\s*\.\s*\./, `${y} . ${m} . ${dd} .`).replace(/20\s+\.\s+\.\s+\./, `${y} . ${m} . ${dd} .`);
-    if (!v || v === t) v = `  ${y} . ${m} . ${dd} . `;
-    put(p, v); mark(p);
+    if (/\d{4}\s*\.\s*\d{1,2}\s*\.\s*\d{1,2}/.test(t)) sh.editText(p.c, p.r, e => e.replace(/(\d{4})(\s*\.\s*)(\d{1,2})(\s*\.\s*)(\d{1,2})/, (_, a, s1, b, s2) => `${y}${s1}${m}${s2}${dd}`));
+    else if (/20\s*\.\s*\.\s*\./.test(t)) sh.editText(p.c, p.r, e => e.replace(/20\s*\.\s*\.\s*\./, () => `${y} . ${m} . ${dd} .`));
+    else replaceAll(p, `  ${y} . ${m} . ${dd} . `);
+    mark(p);
   };
   setDate(f.start, O.start); setDate(f.end, O.end);
-  if (f.months && O.months) { const t = get(f.months); put(f.months, t.replace(/\(\s*\d*\s*개월\)/, `(  ${O.months} 개월)`)); mark(f.months); }
-  if (f.payDay && O.payday) { const t = get(f.payDay); put(f.payDay, t.replace(/매월\s*\d*\s*일에/, `매월  ${O.payday}  일에`)); }
+  if (f.months && O.months) { sh.editText(f.months.c, f.months.r, e => e.replace(/\(\s*\d*\s*개월\)/, () => `(  ${O.months} 개월)`)); mark(f.months); }
+  if (f.payDay && O.payday) sh.editText(f.payDay.c, f.payDay.r, e => e.replace(/매월\s*\d*\s*일에/, () => `매월  ${O.payday}  일에`));
   // 통장: 양식에 견본 계좌가 적혀 있을 때만 채움
   const bk = String(P.bank || "").trim(), bm = bk.match(/^(\S+?)(?:은행)?\s+([\d-]+.*)$/), bankName = bm ? bm[1] : "", acct = bm ? bm[2].trim() : bk;
   if (f.bankSep) {
     const a = f.right(f.bankSep), b = a && f.right(a);
-    if (a && get(a)) { sh.set(a.c, a.r, acct || null, sh.cell(a.c, a.r)); mark(a); if (b && get(b)) { sh.set(b.c, b.r, bankName || null, sh.cell(b.c, b.r)); mark(b); } }
+    if (a && get(a)) { replaceAll(a, acct); mark(a); if (b && get(b)) { replaceAll(b, bankName); mark(b); } }
   }
   // 나머지 글자 칸: 견본 근로자 이름·주민번호·주소·전화를 새 사람 것으로, 빈 서명란에는 이름을 넣음
+  // (한 칸 안에서 일부만 굵게·빨강인 서식은 조각별로 그대로 유지)
   const nameRe = sample.name ? new RegExp([...sample.name.replace(/\s+/g, "")].map(reEsc).join("\\s*"), "g") : null;
+  const lit = s => new RegExp(reEsc(s), "g");
   sh.each((c, r) => {
     if (done.has(c + "," + r) || sh.formula(c, r) != null) return;
-    const el = sh.cell(c, r), t0 = el && (el.getAttribute("t") === "s" || el.getAttribute("t") === "inlineStr" || el.getAttribute("t") === "str") ? sh.text(c, r) : null;
-    if (!t0) return;
-    let t = sh.raw(c, r); if (typeof t !== "string") return;
-    const before = t;
-    if (nameRe && P.name) t = t.replace(nameRe, m => /\s/.test(m) ? spaced(P.name) : P.name);
-    if (sample.rrn) t = t.split(sample.rrn).join(P.rrn || "");
-    if (sample.addr) t = t.split(sample.addr).join(P.address || "");
-    if (sample.tel) t = t.split(sample.tel).join(P.phone || "");
-    if (!sample.name && P.name) t = t.replace(/((?:성\s*명|동의|확인자|수령자\s*성명)\s*:?)(\s{3,})\(인\)/g, (_, a) => `${a}     ${spaced(P.name)}     (인)`);
-    if (f.bankInline && bk && /통장구좌\(\s*[^\s,][^,]*,/.test(t)) t = t.replace(/통장구좌\([^,]*,[^)]*은행\)/, `통장구좌(  ${acct}  ,  ${bankName}  은행)`);
-    // '주  소 : ' 처럼 값이 비어 있는 칸 (오른쪽 칸이 비어 있을 때만)
+    const el = sh.cell(c, r), tt = el?.getAttribute("t");
+    if (!el || !(tt === "s" || tt === "inlineStr" || tt === "str")) return;
+    const t = sh.raw(c, r); if (typeof t !== "string" || !t) return;
     const nx = f.right({ c, r }); let nxEmpty = true;
     for (let cc = nx.c; cc <= nx.c + 6; cc++) if (sh.text(cc, r) || sh.formula(cc, r) != null) { nxEmpty = false; break; }
-    if (nxEmpty && /:\s*$/.test(t)) {
-      const L = K(t.replace(/:\s*$/, ""));
-      const v = /^주소$/.test(L) ? P.address : /^주민등록번호$/.test(L) ? P.rrn : /^(핸드폰번호|전화번호|휴대폰번호?)$/.test(L) ? P.phone : /^성명$/.test(L) ? P.name : null;
-      if (v) t = t.replace(/\s*$/, " ") + v;
-    }
-    if (t !== before) sh.set(c, r, t, el);
+    sh.editText(c, r, e => {
+      if (nameRe && P.name) e.replace(nameRe, m => /\s/.test(m) ? spaced(P.name) : P.name);
+      if (sample.rrn) e.replace(lit(sample.rrn), () => P.rrn || "");
+      if (sample.addr) e.replace(lit(sample.addr), () => P.address || "");
+      if (sample.tel) e.replace(lit(sample.tel), () => P.phone || "");
+      // 빈 서명란: '성명 :          (인)' → 이름은 빈칸(공백) 자리에 넣어 '(인)' 서식은 그대로
+      if (!sample.name && P.name) e.replace(/((?:성\s*명|동의|확인자|수령자\s*성명)\s*:?)(\s{3,})(?=\(인\))/g, (m, a) => `${a}     ${spaced(P.name)}     `);
+      if (f.bankInline && bk && /통장구좌\(\s*[^\s,][^,]*,/.test(t)) e.replace(/통장구좌\([^,]*,[^)]*은행\)/, () => `통장구좌(  ${acct}  ,  ${bankName}  은행)`);
+      // '주  소 : ' 처럼 값이 비어 있는 칸 (오른쪽 칸이 비어 있을 때만)
+      if (nxEmpty && /:\s*$/.test(t)) {
+        const L = K(t.replace(/:\s*$/, ""));
+        const v = /^주소$/.test(L) ? P.address : /^주민등록번호$/.test(L) ? P.rrn : /^(핸드폰번호|전화번호|휴대폰번호?)$/.test(L) ? P.phone : /^성명$/.test(L) ? P.name : null;
+        if (v) { if (!/ $/.test(t)) e.append(" "); e.append(v); }
+      }
+    });
   });
 }
 
@@ -163,7 +171,7 @@ export async function buildContracts(blob, sheetName, people, O) {
     while (used.has(nm)) nm = `${base}(${k++})`; used.add(nm); names.push(nm);
     const doc = src.doc.cloneNode(true);
     const path = `xl/worksheets/sheet${n}.xml`;
-    const sh = new Sheet(nm, path, doc, book.shared);
+    const sh = new Sheet(nm, path, doc, book.shared, book.sharedSi);
     fillOne(sh, P, { ...O, ...(P.o || {}) });   // 사람마다 다른 조건(소속별 근로장소·직종 등)이 있으면 그것을 우선
     // 맨 앞 시트만 선택 상태로
     for (const v of doc.getElementsByTagNameNS(NS, "sheetView")) { if (n === 1) v.setAttribute("tabSelected", "1"); else v.removeAttribute("tabSelected"); }

@@ -92,8 +92,8 @@ function shiftFormula(f, dr, dc) {
 
 /* ================= 시트 ================= */
 class Sheet {
-  constructor(name, path, doc, shared) {
-    this.name = name; this.path = path; this.doc = doc; this.shared = shared; this.dirty = false;
+  constructor(name, path, doc, shared, sharedSi = []) {
+    this.name = name; this.path = path; this.doc = doc; this.shared = shared; this.sharedSi = sharedSi; this.dirty = false;
     this.sd = doc.getElementsByTagNameNS(NS, "sheetData")[0];
     this.rows = new Map();
     for (const row of this.sd.getElementsByTagNameNS(NS, "row")) {
@@ -160,6 +160,60 @@ class Sheet {
     const el = this.ensure(c, r, styleFrom); this.empty(el);
     const fe = this.doc.createElementNS(NS, "f"); fe.textContent = f.replace(/^=/, ""); el.append(fe);
     this.dirty = true;
+  }
+  // 서식 있는 글자(한 칸 안에서 일부만 굵게·빨강 등)를 조각 단위로 읽고 쓰기
+  runs(c, r) {
+    const el = this.cell(c, r); if (!el) return [];
+    const t = el.getAttribute("t");
+    let box = null;
+    if (t === "s") box = this.sharedSi[+(el.getElementsByTagNameNS(NS, "v")[0]?.textContent)];
+    else if (t === "inlineStr") box = el.getElementsByTagNameNS(NS, "is")[0];
+    if (!box) { const v = this.raw(c, r); return v == null ? [] : [{ rPr: null, t: String(v) }]; }
+    const rs = [...box.childNodes].filter(n => n.localName === "r");
+    if (!rs.length) { const tt = [...box.childNodes].find(n => n.localName === "t"); return [{ rPr: null, t: tt ? tt.textContent : "" }]; }
+    return rs.map(rn => ({ rPr: [...rn.childNodes].find(n => n.localName === "rPr") || null, t: [...rn.childNodes].filter(n => n.localName === "t").map(x => x.textContent).join("") }));
+  }
+  setRuns(c, r, runs) {
+    runs = runs.filter(x => x.t !== "");
+    if (!runs.some(x => x.rPr)) return this.set(c, r, runs.map(x => x.t).join("") || null);
+    const el = this.ensure(c, r); this.empty(el);
+    el.setAttribute("t", "inlineStr");
+    const is = this.doc.createElementNS(NS, "is");
+    for (const x of runs) {
+      const rn = this.doc.createElementNS(NS, "r");
+      if (x.rPr) rn.append(this.doc.importNode(x.rPr, true));
+      const te = this.doc.createElementNS(NS, "t"); te.setAttributeNS(XMLNS, "xml:space", "preserve"); te.textContent = x.t; rn.append(te);
+      is.append(rn);
+    }
+    el.append(is); this.dirty = true;
+  }
+  // 글자 바꾸기: 바뀐 부분이 시작하는 조각의 서식을 그대로 이어받음 (나머지 조각 서식은 그대로)
+  editText(c, r, fn) {
+    const runs = this.runs(c, r).map(x => ({ ...x })); if (!runs.length) return false;
+    const before = runs.map(x => x.t).join("");
+    const ops = []; fn({ replace: (re, rep) => ops.push([re, rep]), append: s => ops.push([null, s]) });
+    for (const [re, repl] of ops) {
+      if (!re) { runs[runs.length - 1].t += repl; continue; }
+      const full = runs.map(x => x.t).join("");
+      const g = new RegExp(re.source, re.flags.includes("g") ? re.flags : re.flags + "g");
+      const ms = [...full.matchAll(g)].reverse();
+      for (const m of ms) {
+        const a = m.index, b = a + m[0].length, rep = typeof repl === "function" ? repl(...m) : m[0].replace(new RegExp(re.source, re.flags.replace("g", "")), repl);
+        // a~b 를 지우고 a 자리에 rep 를 넣음
+        let pos = 0, put = false;
+        for (let i = 0; i < runs.length; i++) {
+          const x = runs[i], s0 = pos, e0 = pos + x.t.length; pos = e0;
+          const ds = Math.max(a, s0), de = Math.min(b, e0);
+          let txt = x.t;
+          if (!put && a >= s0 && (a < e0 || (a === e0 && i === runs.length - 1) || (a === e0 && b === a && false))) { txt = txt.slice(0, a - s0) + rep + txt.slice(Math.max(a, Math.min(b, e0)) - s0); put = true; x.t = txt; continue; }
+          if (de > ds) x.t = txt.slice(0, ds - s0) + txt.slice(de - s0);
+        }
+        if (!put) runs[runs.length - 1].t += rep;
+      }
+    }
+    const after = runs.map(x => x.t).join("");
+    if (after === before) return false;
+    this.setRuns(c, r, runs); return true;
   }
   each(fn) { for (const [r, { cells }] of this.rows) for (const c of cells.keys()) fn(c, r); }
   find(test, maxRow = 1e9) { let hit = null; this.each((c, r) => { if (!hit && r <= maxRow && test(this.text(c, r), c, r)) hit = { c, r }; }); return hit; }
@@ -277,7 +331,8 @@ async function openBook(buf) {
   const rels = parse(await zip.text("xl/_rels/workbook.xml.rels"));
   const relMap = Object.fromEntries([...rels.getElementsByTagName("Relationship")].map(r => [r.getAttribute("Id"), r.getAttribute("Target")]));
   const ssText = await zip.text("xl/sharedStrings.xml");
-  const shared = ssText ? [...parse(ssText).getElementsByTagNameNS(NS, "si")].map(si => [...si.getElementsByTagNameNS(NS, "t")].filter(t => t.parentNode.localName !== "rPh").map(t => t.textContent).join("")) : [];
+  const sharedSi = ssText ? [...parse(ssText).getElementsByTagNameNS(NS, "si")] : [];
+  const shared = ssText ? sharedSi.map(si => [...si.getElementsByTagNameNS(NS, "t")].filter(t => t.parentNode.localName !== "rPh").map(t => t.textContent).join("")) : [];
   const list = [...wb.getElementsByTagNameNS(NS, "sheet")].map(s => {
     const rid = [...s.attributes].find(a => a.localName === "id").value; let t = relMap[rid];
     t = t.startsWith("/") ? t.slice(1) : "xl/" + t.replace(/^\.\//, "");
@@ -285,12 +340,12 @@ async function openBook(buf) {
   });
   const cache = {};
   const book = {
-    zip, wb, rels, list, shared,
+    zip, wb, rels, list, shared, sharedSi,
     names: list.map(s => s.name),
     async sheet(name) {
       if (cache[name]) return cache[name];
       const it = list.find(s => s.name === name); if (!it) return null;
-      return (cache[name] = new Sheet(name, it.path, parse(await zip.text(it.path)), shared));
+      return (cache[name] = new Sheet(name, it.path, parse(await zip.text(it.path)), shared, sharedSi));
     },
     find(test) { return list.find(s => test(s.name.replace(/\s+/g, "")))?.name || null; },
     loaded: () => Object.values(cache),
@@ -350,8 +405,8 @@ function replaceMonthLabels(sh, ym, maxRow) {
   sh.each((c, r) => {
     if (r > maxRow || sh.formula(c, r) != null) return;
     const t = sh.text(c, r); if (!t) return;
-    if (/^\d{1,2}\s*월$/.test(t)) sh.set(c, r, `${m}월`, sh.cell(c, r));
-    else if (/\(\s*\d{4}\s*년\s*\d{1,2}\s*월\s*\)/.test(t)) sh.set(c, r, t.replace(/\(\s*\d{4}\s*년\s*\d{1,2}\s*월\s*\)/, `( ${y}년 ${m}월 )`), sh.cell(c, r));
+    if (/^\d{1,2}\s*월$/.test(t)) sh.editText(c, r, e => e.replace(/\d{1,2}\s*월/, () => `${m}월`));
+    else if (/\(\s*\d{4}\s*년\s*\d{1,2}\s*월\s*\)/.test(t)) sh.editText(c, r, e => e.replace(/\(\s*\d{4}\s*년\s*\d{1,2}\s*월\s*\)/, () => `( ${y}년 ${m}월 )`));
   });
 }
 const setMult = (f, n) => /\*\s*[\d.]+/.test(f) ? f.replace(/\*\s*[\d.]+/, "*" + n) : f;
@@ -473,8 +528,8 @@ async function fillExec(book, D, notes, L) {
   // 제목·현장명
   sh.each((c, r) => {
     if (r >= hdr.r) return; const t = sh.text(c, r);
-    if (/직영\s*실행/.test(t) && D.title) sh.set(c, r, D.title, sh.cell(c, r));
-    else if (/^현장명\s*:/.test(t) && D.site) sh.set(c, r, `현장명 :  ${D.site}`, sh.cell(c, r));
+    if (/직영\s*실행/.test(t) && D.title) sh.editText(c, r, e => e.replace(/^[\s\S]*$/, () => D.title));
+    else if (/^현장명\s*:/.test(t) && D.site) sh.editText(c, r, e => e.replace(/:[\s\S]*$/, () => `:  ${D.site}`));
   });
   // 인건비와 연결: 이름이 한 번만 나오는 사람은 금액을 '=인건비!AJ행' 수식으로
   const linkRow = {};
