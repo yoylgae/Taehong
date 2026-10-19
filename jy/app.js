@@ -332,6 +332,7 @@ function rExec() {
   $("#x-appr").oninput = e => { st.approvals = e.target.value.split(",").map(s => s.trim()).filter(Boolean); mark("month"); };
   $("#x-print").onclick = () => P.printExec(S.month, sorted("exec"));
   $("#x-labor").onclick = () => {
+    applyRates();
     const by = {}; S.rows.labor.forEach(l => { const n = (l.data.name || "").trim(); if (n) (by[n] ||= []).push(l); });
     const ex = {}; S.rows.exec.forEach(r => { const n = (r.data.vendor || "").trim(); if (n) (ex[n] ||= []).push(r); });
     let ok = 0; const skip = [];
@@ -359,6 +360,23 @@ function bindRowOps(sheet, rerender) {
 }
 const focusLast = () => { const el = $$("#sheet tbody tr:last-child [data-f]")[0]; el?.focus(); el?.scrollIntoView({ block: "nearest" }); };
 
+/* ================= 단가 규칙 (소속별) ================= */
+// tier: 출역 min일 이상이면 hi, 아니면 lo / fixed: 항상 rate / 규칙이 없는 소속은 사람마다 직접 입력
+const DEFAULT_RULES = [
+  { team: "드림인력", type: "tier", min: 8, hi: 170000, lo: 160000 },
+  { team: "신호수", type: "fixed", rate: 160000 },
+];
+const rules = () => (S.month.settings.rateRules ||= DEFAULT_RULES.map(r => ({ ...r })));
+const ruleOf = team => rules().find(x => x.team && x.team === (team || "").trim()) || null;
+const ruleRate = (rule, days) => rule.type === "fixed" ? Number(rule.rate) || 0 : days >= (Number(rule.min) || 0) ? Number(rule.hi) || 0 : Number(rule.lo) || 0;
+const ruleText = r => r.type === "fixed" ? `${fmt0(r.rate)}원 고정` : `${r.min}일 이상 ${fmt0(r.hi)}원 · 미만 ${fmt0(r.lo)}원`;
+// 규칙이 있는 소속의 단가를 출역일수에 맞게 다시 정함 (바뀐 줄 수를 돌려줌)
+function applyRates(list = S.rows.labor) {
+  let n = 0;
+  list.forEach(r => { const rule = ruleOf(r.data.team); if (!rule) return; const v = ruleRate(rule, sumObj(r.data.d)); if (Number(r.data.rate) !== v) { r.data.rate = v; mark("rows", r); n++; } });
+  return n;
+}
+
 /* ================= 인건비 (인력 출력 현황) ================= */
 function rLabor() {
   const ym = S.month.ym, rows = sorted("labor"), n = nDays(ym, rows, ["d"]);
@@ -369,6 +387,7 @@ function rLabor() {
       <button class="btn primary" id="l-add">+ 인원 추가</button>
       <label class="btn up" title="업체(인력사무소·협력사)에서 받은 정산 엑셀을 올리면 출역일·공수·단가를 자동으로 채웁니다">📥 업체 정산 엑셀 불러오기<input type="file" accept=".xlsx" multiple id="l-imp"></label>
       <button class="btn" id="l-sort">소속순 정렬</button>
+      <button class="btn" id="l-rules" title="${esc(rules().map(r => `${r.team}: ${ruleText(r)}`).join("\n"))}">⚙ 단가 규칙</button>
       <span class="muted" style="font-size:12px">날짜 칸을 누르면 <b style="color:#1e40af">1</b> → <b style="color:#b45309">0.5</b> → 빈칸 순서로 바뀝니다.</span>
       <span class="grow"></span><span class="sum-chip">출역 <span data-calc="l-days"></span>일 · <span data-calc="l-amt"></span>원</span>
       <button class="btn" id="l-print">🖨 인쇄</button>
@@ -377,7 +396,7 @@ function rLabor() {
       <thead><tr><th class="stick" style="left:0;width:38px">번호</th><th style="width:76px">소속</th><th style="width:78px">성명</th><th style="width:84px">단가</th>${dayHead(ym, n)}<th style="width:52px">출역<br>일수</th><th style="width:96px">금액</th><th style="width:120px">비고</th><th style="width:76px"></th></tr></thead>
       <tbody>${rows.map((r, i) => `<tr>
         <td class="idx stick">${i + 1}</td><td>${inp("rows", r, "data.team", { cls: "mw", ph: "소속" }).replace("<input", '<input list="dl-teams"')}</td>
-        <td>${inp("rows", r, "data.name", { cls: "mw" }).replace("<input", '<input list="dl-workers"')}</td><td>${inp("rows", r, "data.rate", { numeric: 1, cls: "mw" })}</td>
+        <td>${inp("rows", r, "data.name", { cls: "mw" }).replace("<input", '<input list="dl-workers"')}</td>${ruleOf(r.data.team) ? `<td class="calc auto" title="${esc(r.data.team)} 단가 규칙: ${esc(ruleText(ruleOf(r.data.team)))}"><span data-calc="l-r-${r.id}"></span><small>자동</small></td>` : `<td>${inp("rows", r, "data.rate", { numeric: 1, cls: "mw" })}</td>`}
         ${Array.from({ length: n }, (_, k) => dcell(r, "d", k + 1, ym)).join("")}
         <td class="calc" data-calc="l-d-${r.id}" style="text-align:center"></td><td class="calc" data-calc="l-a-${r.id}"></td>
         <td>${inp("rows", r, "data.memo", { cls: "mw" })}</td>
@@ -385,10 +404,12 @@ function rLabor() {
         || `<tr><td colspan="${n + 8}" class="c muted" style="padding:30px">명단이 없습니다. <b>+ 인원 추가</b>로 시작하세요.</td></tr>`}</tbody>
       <tfoot><tr><td class="stick"></td><td colspan="3" class="c">일별 인원 / 합계</td>${Array.from({ length: n }, (_, k) => `<td class="dsum" data-calc="l-s-${k + 1}"></td>`).join("")}<td class="c" data-calc="l-days"></td><td class="n" data-calc="l-amt"></td><td colspan="2"></td></tr></tfoot>
     </table></div>
-    <p class="hint">성명 칸에 인적사항에 있는 사람을 고르면 소속·단가가 비어 있을 때 자동으로 채워집니다. 금액 = 출역일수 × 단가</p>`;
+    <p class="hint">단가 규칙 — ${rules().map(r => `<b>${esc(r.team)}</b> ${esc(ruleText(r))}`).join(" · ") || "없음"} · 그 밖의 소속(비계·건하이엔지 등)은 사람마다 단가를 직접 입력합니다. 금액 = 출역일수 × 단가</p>`;
   S.calc = () => {
+    applyRates();
     let td = 0, ta = 0; const per = {};
     S.rows.labor.forEach(r => {
+      if (ruleOf(r.data.team)) setCalc("l-r-" + r.id, fmt0(r.data.rate));
       const d = sumObj(r.data.d), a = d * (Number(r.data.rate) || 0); td += d; ta += a;
       setCalc("l-d-" + r.id, d || ""); setCalc("l-a-" + r.id, fmt0(a));
       Object.entries(r.data.d || {}).forEach(([k, v]) => per[k] = (per[k] || 0) + (Number(v) || 0));
@@ -399,9 +420,16 @@ function rLabor() {
   $("#l-add").onclick = () => { const last = sorted("labor").at(-1); newRow("labor", { team: last?.data.team || "", name: "", rate: last?.data.rate ?? null, d: {}, ded: {}, memo: "" }); rLabor(); S.calc(); focusLast(); };
   $("#l-sort").onclick = () => { const list = sorted("labor"); const order = [...new Set(list.map(r => r.data.team || ""))]; list.sort((a, b) => order.indexOf(a.data.team || "") - order.indexOf(b.data.team || "") || a.sort - b.sort).forEach((r, k) => { r.sort = k + 1; mark("rows", r); }); rLabor(); S.calc(); };
   $("#l-print").onclick = () => P.printLabor(S.month, sorted("labor"));
+  $("#l-rules").onclick = rulesDialog;
   $("#l-imp").onchange = e => { const fs = [...e.target.files]; e.target.value = ""; if (fs.length) vendorImport(fs); };
   bindRowOps("labor", rLabor);
 }
+// 인건비: 소속을 바꾸면 단가 규칙 적용 여부가 바뀌므로 다시 그림
+document.addEventListener("change", e => {
+  const el = e.target; if (S.sheet !== "labor" || el.dataset?.f !== "data.team") return;
+  const r = findRow(el.dataset.id); if (r && !ruleOf(r.data.team)) { const w = S.workers.find(w => w.name === (r.data.name || "").trim() && w.rate); if (w && !r.data.rate) { r.data.rate = w.rate; mark("rows", r); } }
+  rLabor(); S.calc();
+});
 // 인건비: 이름을 고르면 인적사항의 소속·단가로 채움
 document.addEventListener("change", e => {
     const el = e.target; if (S.sheet !== "labor" || el.dataset?.f !== "data.name") return;
@@ -411,6 +439,43 @@ document.addEventListener("change", e => {
     if (!r.data.rate && w.rate) { r.data.rate = w.rate; ch = true; }
     if (ch) { mark("rows", r); rLabor(); S.calc(); }
 });
+function rulesDialog() {
+  let dlg = $("#dlg-rules");
+  if (!dlg) { dlg = document.createElement("dialog"); dlg.id = "dlg-rules"; dlg.className = "imp rules"; document.body.append(dlg); }
+  const list = rules().map(r => ({ ...r }));
+  const teams = [...new Set(S.rows.labor.map(r => (r.data.team || "").trim()).filter(Boolean))];
+  const draw = () => {
+    dlg.innerHTML = `<form method="dialog">
+      <h3>단가 규칙</h3>
+      <p class="hint" style="margin:-8px 0 12px">규칙을 정한 소속은 출역일수에 맞춰 단가가 자동으로 정해집니다. 규칙이 없는 소속은 사람마다 단가를 직접 입력합니다. 새 달을 만들면 규칙도 함께 옮겨 갑니다.</p>
+      <table class="t imp-t"><thead><tr><th>소속</th><th>방식</th><th colspan="3">단가</th><th></th></tr></thead><tbody>
+      ${list.map((r, i) => `<tr>
+        <td><input data-i="${i}" data-k="team" value="${esc(r.team)}" list="dl-rteams" style="width:120px"></td>
+        <td><select data-i="${i}" data-k="type"><option value="tier" ${r.type === "tier" ? "selected" : ""}>출역일수 기준</option><option value="fixed" ${r.type === "fixed" ? "selected" : ""}>고정</option></select></td>
+        ${r.type === "tier"
+          ? `<td><input data-i="${i}" data-k="min" value="${esc(r.min)}" class="n" style="width:50px">일 이상</td><td><input data-i="${i}" data-k="hi" value="${fmt(r.hi)}" class="n" style="width:100px">원</td><td>미만 <input data-i="${i}" data-k="lo" value="${fmt(r.lo)}" class="n" style="width:100px">원</td>`
+          : `<td colspan="3"><input data-i="${i}" data-k="rate" value="${fmt(r.rate)}" class="n" style="width:100px">원</td>`}
+        <td><button type="button" class="x" data-rm="${i}">✕</button></td></tr>`).join("")}
+      </tbody></table>
+      <datalist id="dl-rteams">${teams.map(t => `<option value="${esc(t)}">`).join("")}</datalist>
+      <button type="button" class="btn sm" id="r-add" style="margin-top:8px">+ 규칙 추가</button>
+      <p class="hint">이 달 소속: ${teams.map(t => `<b>${esc(t)}</b>${list.some(r => r.team === t) ? " (규칙)" : " (직접 입력)"}`).join(" · ") || "-"}</p>
+      <div class="dlg-btns"><button value="cancel" class="btn">닫기</button><button value="ok" class="btn primary">저장하고 다시 계산</button></div>
+    </form>`;
+    $$("[data-k]", dlg).forEach(el => el.onchange = () => { const r = list[+el.dataset.i], k = el.dataset.k; r[k] = ["min", "hi", "lo", "rate"].includes(k) ? num(el.value) : el.value.trim(); if (k === "type") { if (r.type === "fixed" && r.rate == null) r.rate = r.lo ?? 160000; if (r.type === "tier") { r.min ??= 8; r.hi ??= 170000; r.lo ??= 160000; } draw(); } });
+    $$("[data-rm]", dlg).forEach(b => b.onclick = () => { list.splice(+b.dataset.rm, 1); draw(); });
+    $("#r-add", dlg).onclick = () => { list.push({ team: "", type: "fixed", rate: 160000 }); draw(); };
+  };
+  draw(); dlg.showModal();
+  dlg.onclose = () => {
+    if (dlg.returnValue !== "ok") return;
+    S.month.settings.rateRules = list.filter(r => r.team);
+    mark("month");
+    const n = applyRates();
+    renderMonthKeepScroll();
+    toast(`단가 규칙을 저장했습니다.${n ? ` ${n}명의 단가가 바뀌었습니다.` : ""}`);
+  };
+}
 function dcell(r, key, d, ym, cycle = "half") {
   const v = r.data[key]?.[d];
   return `<td class="dc ${v == 1 ? "v1" : v ? "vh" : ""} ${isWe(ym, d) ? "we" : ""}" data-dc="${r.id}" data-key="${key}" data-day="${d}" data-cycle="${cycle}">${v ? (v == 0.5 ? "½" : v) : ""}</td>`;
@@ -518,9 +583,10 @@ async function vendorImport(files) {
         }
       }
     }
+    const rc = applyRates();
     await flush();
     renderMonthKeepScroll();
-    toast(`인건비 ${upd}명 갱신 · ${add}명 추가` + (fillWorkers ? ` / 인적사항 ${wAdd}명 추가 · ${wFill}명 보완` : "") + " — 실행내역서 탭의 '인건비 금액 반영'으로 금액도 맞출 수 있습니다.");
+    toast((rc ? `단가 규칙으로 ${rc}명 단가 조정 · ` : "") + `인건비 ${upd}명 갱신 · ${add}명 추가` + (fillWorkers ? ` / 인적사항 ${wAdd}명 추가 · ${wFill}명 보완` : "") + " — 실행내역서 탭의 '인건비 금액 반영'으로 금액도 맞출 수 있습니다.");
   };
 }
 
@@ -532,6 +598,7 @@ const tplStore = {
   async set(v) { try { const db = await this.db(); await new Promise(ok => { const t = db.transaction("f", "readwrite"); t.objectStore("f").put(v, "template"); t.oncomplete = t.onerror = ok; }); } catch {} },
 };
 async function exportDialog() {
+  applyRates();
   await flush();
   let dlg = $("#dlg-xlsx");
   if (!dlg) { dlg = document.createElement("dialog"); dlg.id = "dlg-xlsx"; dlg.className = "imp"; document.body.append(dlg); }
@@ -632,6 +699,7 @@ const workerOf = r => { const nm = (r.data.name || "").trim(); const c = S.worke
 const maskRrn = s => { s = String(s || ""); if (S.showRrn || !s) return s; const m = s.match(/^(\d{6})-?(\d)/); return m ? `${m[1]}-${m[2]}******` : s.replace(/.(?=.{0,0}$)/, "*"); };
 const payOf = r => { const days = sumObj(r.data.d), amt = days * (Number(r.data.rate) || 0); const ded = DED.reduce((a, [k]) => a + (Number(r.data.ded?.[k]) || 0), 0); return { days, amt, ded, net: amt - ded }; };
 function rPay() {
+  applyRates();
   const ym = S.month.ym, rows = sorted("labor").filter(r => (r.data.name || "").trim());
   const dayRow = (r, from) => Array.from({ length: 16 }, (_, k) => { const d = from + k; const v = from === 1 && k === 15 ? null : r.data.d?.[d]; return `<td class="mini ${v ? "on" : ""}">${v ? (v == 0.5 ? "½" : v) : ""}</td>`; }).join("");
   $("#sheet").innerHTML = `
