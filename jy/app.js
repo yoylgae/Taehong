@@ -946,10 +946,15 @@ function monthWorkers() {
   const idx = n => { const i = order.indexOf(n); return i < 0 ? 1e9 : i; };
   return S.workers.filter(w => order.includes(w.name)).sort((a, b) => idx(a.name) - idx(b.name));
 }
+// 검색어로 사람 고르기 (이름·소속·전화·주소·주민번호 앞자리, 공백 무시)
+function peopleList() {
+  const q = S.peopleQ.replace(/\s+/g, "");
+  if (!q) return S.peopleAll ? S.workers.slice() : monthWorkers();
+  return S.workers.filter(w => [w.name, w.team, w.phone, w.address, (w.rrn || "").slice(0, 6), w.bank].some(v => String(v || "").replace(/\s+/g, "").includes(q)));
+}
 function rPeople() {
   const q = S.peopleQ.trim();
-  let list = S.peopleAll ? S.workers.slice() : monthWorkers();
-  if (q) list = S.workers.filter(w => [w.name, w.team, w.phone].some(v => (v || "").includes(q)));
+  const list = peopleList();
   const missing = [...new Set(sorted("labor").map(r => (r.data.name || "").trim()).filter(n => n && !S.workers.some(w => w.name === n)))];
   $("#sheet").innerHTML = `
     <div class="bar">
@@ -957,10 +962,15 @@ function rPeople() {
       ${missing.length ? `<button class="btn" id="w-miss" title="${esc(missing.join(", "))}">인건비 명단에서 빠진 ${missing.length}명 추가</button>` : ""}
       <label><input type="checkbox" id="w-all" ${S.peopleAll ? "checked" : ""}> 전체 사람 보기 (체크 해제 시 이번 달 명단만)</label>
       <input id="w-q" placeholder="이름·소속·전화 검색" value="${esc(S.peopleQ)}" style="width:180px">
-      <span class="grow"></span><span class="muted" style="font-size:12px">${list.length}명</span>
+      <span class="grow"></span><span class="muted" style="font-size:12px" id="w-cnt">${list.length}명</span>
       <button class="btn" id="w-print">🖨 인쇄</button>
     </div>
-    <div class="people">${list.map(w => {
+    <div class="people" id="w-list">${peopleCards(list, q)}</div>
+    <p class="hint">사람 인적사항은 달이 바뀌어도 유지됩니다. 사진을 칸에 끌어다 놓아도 올라갑니다.</p>`;
+  bindPeople(missing);
+}
+function peopleCards(list, q) {
+  return list.map(w => {
       const fs = S.files.filter(f => f.sheet === "id" && f.worker_id === w.id);
       return `<div class="pcard" data-w="${w.id}">
         <div class="ph">${inp("workers", w, "name", { cls: "nm", ph: "성명" })}<input data-k="workers" data-id="${w.id}" data-f="team" value="${esc(w.team)}" placeholder="소속" style="width:110px"><span class="grow"></span><button class="x" data-wdel="${w.id}" title="이 사람 삭제">✕</button></div>
@@ -972,13 +982,17 @@ function rPeople() {
         <div class="slots">${ID_SLOTS.map(g => `<div class="slot" data-drop="id" data-wid="${w.id}" data-grp="${g}">
           <div class="sl">${g}<label class="up">+ 올리기<input type="file" accept="image/*,application/pdf" multiple data-up="id" data-wid="${w.id}" data-grp="${g}"></label></div>
           <div class="thumbs">${fs.filter(f => f.grp === g).map(thumb).join("")}</div></div>`).join("")}</div>
-      </div>`; }).join("") || `<div class="card empty" style="grid-column:1/-1">${q ? "찾는 사람이 없습니다." : "이번 달 명단에 해당하는 사람이 없습니다. <b>+ 사람 추가</b>를 누르거나 <b>전체 사람 보기</b>를 켜 보세요."}</div>`}</div>
-    <p class="hint">사람 인적사항은 달이 바뀌어도 유지됩니다. 사진을 칸에 끌어다 놓아도 올라갑니다.</p>`;
+      </div>`; }).join("") || `<div class="card empty" style="grid-column:1/-1">${q ? "찾는 사람이 없습니다." : "이번 달 명단에 해당하는 사람이 없습니다. <b>+ 사람 추가</b>를 누르거나 <b>전체 사람 보기</b>를 켜 보세요."}</div>`;
+}
+function bindPeople(missing) {
   $("#w-add").onclick = async () => { const w = await addWorker({ name: "" }); S.peopleQ = ""; rPeople(); $(`.pcard[data-w="${w.id}"] input.nm`)?.focus(); };
   $("#w-miss")?.addEventListener("click", async () => { for (const n of missing) { const l = S.rows.labor.find(r => (r.data.name || "").trim() === n); await addWorker({ name: n, team: l?.data.team || "", rate: l?.data.rate || 0 }); } rPeople(); toast(`${missing.length}명 추가했습니다.`); });
   $("#w-all").onchange = e => { S.peopleAll = e.target.checked; rPeople(); };
-  $("#w-q").oninput = e => { S.peopleQ = e.target.value; const pos = e.target.selectionStart; rPeople(); const el = $("#w-q"); el.focus(); el.setSelectionRange(pos, pos); };
-  $("#w-print").onclick = () => P.printPeople(S.month, list, S.files, S.urls);
+  // 검색창은 다시 그리지 않고 아래 목록만 바꿈 → 한글 조합(ㄱ→기→김)이 끊기지 않음
+  const refresh = () => { const list = peopleList(); $("#w-list").innerHTML = peopleCards(list, S.peopleQ.trim()); $("#w-cnt").textContent = list.length + "명"; };
+  $("#w-q").oninput = e => { S.peopleQ = e.target.value; refresh(); };
+  $("#w-q").addEventListener("compositionend", e => { S.peopleQ = e.target.value; refresh(); });
+  $("#w-print").onclick = () => P.printPeople(S.month, peopleList(), S.files, S.urls);
   $("#sheet").onclick = async e => {
     const b = e.target.closest("[data-wdel]"); if (!b) return;
     const w = S.workers.find(x => x.id === b.dataset.wdel);
