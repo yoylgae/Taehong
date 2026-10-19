@@ -29,7 +29,7 @@
   견본 근로자 이름이 들어간 서명란 글자도 새 사람으로 바꾼다. 인쇄 영역·주석·인쇄설정은 시트마다 복사.
 
 ## 홈 · 현장 지적도 (`map/`)
-- 홈 화면 가운데에 지적도(iframe `map/`)를 크게 띄움. 메뉴 공사관리 › 현장 지적도에서도 열림.
+- 메뉴 공사관리 › 현장 지적도(탭)로 열림. 홈은 인사말·숫자 4개·최근 작업계획서·공사기간·바로가기만 둔 간단한 화면.
 - 도면 원본: AutoCAD에서 뽑은 PDF → `pdftocairo -svg` + `pdftotext -bbox` → `map/tools/extract.py` → `map/base.json`
   (선 = 폴리선, 채움 = 삼각형 묶음, 지번 = 글리프 모양 + 글자 내용). 1pt = 10 도면단위.
   새 도면으로 바꿀 때: `pdftocairo -svg a.pdf a.svg; pdftotext -bbox a.pdf a.html; python3 map/tools/extract.py a.svg a.html map/base.json`

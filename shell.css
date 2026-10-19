@@ -132,23 +132,20 @@ dialog input:focus{outline:2px solid #bfd3ff;border-color:var(--primary)}
 
 @media (max-width:1100px){.kpis{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}}
 
-/* 홈: 지적도 중심 */
-.dash{max-width:none;padding:16px 20px 32px}
-.dash-head{margin-bottom:12px;align-items:center}
-.dash-head h1{font-size:20px}
-.kmini{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}
-.km{display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:6px 14px;min-width:92px;box-shadow:var(--shadow)}
-.km small{font-size:11.5px;color:var(--muted);font-weight:500}
-.km b{font-size:20px;font-weight:800;letter-spacing:-.5px;line-height:1.2}
-.km.accent{background:linear-gradient(135deg,#2563eb,#1e40af);border-color:transparent;color:#fff}
-.km.accent small{color:rgba(255,255,255,.8)}
-.mapcard{background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);overflow:hidden;height:calc(100vh - 190px);min-height:520px;margin-bottom:18px}
-.mapcard iframe{width:100%;height:100%;border:0;display:block}
-@media (max-width:700px){.mapcard{height:calc(100vh - 150px);min-height:440px}.kmini{margin-left:0}.dash{padding:10px 10px 24px}}
+/* 홈: 간단하게 */
+.dash.simple{max-width:1100px}
+.kpi{text-decoration:none;color:inherit;transition:transform .12s,box-shadow .12s}
+a.kpi:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(16,24,40,.08)}
+.list.recent li{align-items:center;padding:11px 0}
+.list.recent li .t{flex:1;min-width:0}
+.list.recent .st{flex:none}
+.quick{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.quick a{display:flex;align-items:center;gap:10px;padding:12px;border-radius:12px;background:#f6f8fb;text-decoration:none;color:var(--ink);font-weight:600;font-size:13px;transition:background .12s}
+.quick a:hover{background:#eaf1ff;color:var(--primary)}
+.quick i{font-style:normal;font-size:18px}
 @media (max-width:700px){
-  .dash-head h1{font-size:17px}.dash-head .btn.primary{display:none}
-  .kmini{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;width:100%}
-  .km{min-width:0;padding:4px 8px}.km small{font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.km b{font-size:16px}
-  .mapcard{border-radius:12px}
+  .dash{padding:14px 12px 24px}.dash-head h1{font-size:18px}
+  .kpis{grid-template-columns:repeat(2,1fr);gap:8px}.kpi{padding:12px 14px}.kpi .k-val{font-size:24px}
   #site-label{max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 }
+@media (max-width:1100px){.grid2{grid-template-columns:minmax(0,1fr)}}

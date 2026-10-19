@@ -160,7 +160,6 @@ async function loadDash() {
     .order("created_at", { ascending: false });
   if (error) return toast("홈 화면 조회 실패: " + error.message);
   const cnt = s => data.filter(r => r.status === s).length;
-  for (const s of ["작성중", "상신", "결재완료", "반려"]) $("#s-" + s).textContent = cnt(s);
   $("#k-total").textContent = data.length;
   $("#k-wait").textContent = cnt("상신");
   $("#k-today").textContent = data.filter(r => r.work_start && r.work_end && r.work_start <= today && today <= r.work_end).length;
@@ -168,18 +167,15 @@ async function loadDash() {
   const nb = $("#nav-wait"); if (nb) { nb.textContent = cnt("상신"); nb.hidden = !cnt("상신"); }
 
   const title = r => `${r.work_name || "(무제)"}${r.reg_no ? ` · ${r.reg_no}` : ""}`;
-  const recent = data.slice(0, 7);
-  $("#d-recent").innerHTML = recent.length ? recent.map(r => `<tr data-id="${r.id}"><td><span class="st st-${esc(r.status)}">${esc(r.status)}</span></td><td title="${esc(title(r))}">${esc(title(r))}</td><td>${esc(r.work_start)} ~ ${esc(r.work_end)}</td><td>${r.created_at.slice(0, 10)}</td></tr>`).join("")
-    : `<tr><td colspan="4" class="empty">아직 작성한 작업계획서가 없습니다.</td></tr>`;
-  const wait = data.filter(r => r.status === "상신");
-  $("#d-todo").innerHTML = wait.length ? wait.slice(0, 6).map(r => `<li data-id="${r.id}"><span>${esc(title(r))}</span><small>${r.created_at.slice(5, 10)}</small></li>`).join("")
-    : `<li class="none">결재 대기 중인 문서가 없습니다.</li>`;
+  const recent = data.slice(0, 6);
+  $("#d-recent").innerHTML = recent.length ? recent.map(r => `<li data-id="${r.id}"><span class="st st-${esc(r.status)}">${esc(r.status)}</span><span class="t" title="${esc(title(r))}">${esc(title(r))}</span><small>${esc((r.work_start || "").slice(5))}${r.work_end && r.work_end !== r.work_start ? " ~ " + esc(r.work_end.slice(5)) : ""}</small></li>`).join("")
+    : `<li class="none">아직 작성한 작업계획서가 없습니다.</li>`;
 }
 document.addEventListener("click", e => {
-  const r = e.target.closest("#d-recent tr[data-id], #d-todo li[data-id]");
+  const r = e.target.closest("#d-recent li[data-id]");
   if (r) openTab("ewp", "#/edit/" + r.dataset.id);
 });
-$("#d-refresh").onclick = loadDash;
+
 // 지도(iframe)에서 다른 화면 열기 요청
 addEventListener("message", e => {
   if (e.origin !== location.origin || e.data?.pms !== "open") return;

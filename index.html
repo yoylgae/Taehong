@@ -38,28 +38,23 @@
 
   <main class="content" id="content">
     <section class="pane" data-pane="home" id="home">
-      <div class="dash">
+      <div class="dash simple">
         <div class="dash-head">
           <div><h1 id="d-hello">안녕하세요</h1><p class="sub" id="d-now"></p></div>
-          <div class="kmini">
-            <span class="km"><small>오늘 작업 장비</small><b id="k-today">0</b></span>
-            <span class="km accent"><small>결재 대기</small><b id="k-wait">0</b></span>
-            <span class="km"><small>이번 달 반입</small><b id="k-month">0</b></span>
-            <span class="km"><small>전체 계획서</small><b id="k-total">0</b></span>
-          </div>
           <a class="btn primary" href="#" data-open="ewp" data-hash="#/new">+ 작업계획서 작성</a>
         </div>
 
-        <div class="mapcard">
-          <iframe id="home-map" title="현장 지적도" src="map/"></iframe>
+        <div class="kpis">
+          <a href="#" class="kpi" data-open="map"><span class="k-label">오늘 작업 장비</span><b class="k-val" id="k-today">0</b><span class="k-sub">대</span></a>
+          <a href="#" class="kpi accent" data-open="ewp"><span class="k-label">결재 대기</span><b class="k-val" id="k-wait">0</b><span class="k-sub">건</span></a>
+          <a href="#" class="kpi" data-open="ewp"><span class="k-label">이번 달 반입</span><b class="k-val" id="k-month">0</b><span class="k-sub">대</span></a>
+          <a href="#" class="kpi" data-open="ewp"><span class="k-label">전체 작업계획서</span><b class="k-val" id="k-total">0</b><span class="k-sub">건</span></a>
         </div>
 
         <div class="grid2">
           <div class="card">
             <div class="card-h"><h3>최근 작업계획서</h3><a href="#" data-open="ewp" class="link">전체 보기 →</a></div>
-            <table class="tb"><colgroup><col style="width:90px"><col><col style="width:170px"><col style="width:100px"></colgroup>
-              <thead><tr><th>상태</th><th>작업명 · 차량번호</th><th>작업기간</th><th>등록일</th></tr></thead>
-              <tbody id="d-recent"></tbody></table>
+            <ul class="list recent" id="d-recent"></ul>
           </div>
           <div class="col">
             <div class="card">
@@ -69,16 +64,12 @@
               <div class="term-row"><span>진행 <b id="d-done">-</b></span><span>남은 기간 <b id="d-left">-</b></span></div>
             </div>
             <div class="card">
-              <div class="card-h"><h3>결재 대기</h3><button type="button" class="link" id="d-refresh">새로고침</button></div>
-              <ul class="list" id="d-todo"></ul>
-            </div>
-            <div class="card">
-              <div class="card-h"><h3>상태별 현황</h3></div>
-              <div class="stat-row">
-                <div><small>작성중</small><b id="s-작성중">0</b></div>
-                <div><small>상신</small><b id="s-상신">0</b></div>
-                <div><small>결재완료</small><b id="s-결재완료">0</b></div>
-                <div><small>반려</small><b id="s-반려">0</b></div>
+              <div class="card-h"><h3>바로가기</h3></div>
+              <div class="quick">
+                <a href="#" data-open="map"><i>🗺</i><span>현장 지적도</span></a>
+                <a href="#" data-open="ewp"><i>🏗</i><span>작업계획서</span></a>
+                <a href="#" data-open="jy"><i>📒</i><span>직영실행</span></a>
+                <a href="#" data-open="pdf"><i>📄</i><span>PDF 편집</span></a>
               </div>
             </div>
           </div>
