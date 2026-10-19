@@ -21,6 +21,8 @@ export const KINDS = [
   { id: "용접/절단", color: "#ef4444", svg: S(`<path d="M16 3c1 5 7 7 7 14a7 7 0 0 1-14 0c0-4 2-6 3-8 1 3 2 4 3 4 0-4 1-7 1-10z" fill="currentColor" stroke="none"/><path d="M16 26c-2 0-3-1.5-3-3.5 0-2 2-3 3-5 1 2 3 3 3 5S18 26 16 26z" fill="#fff" stroke="none"/>`) },
   { id: "인원배치", color: "#10b981", svg: S(`<path d="M8 13a8 8 0 0 1 16 0" fill="currentColor" stroke="none"/><path d="M6 13.5h20"/><path d="M16 5v3" stroke="#fff"/><circle cx="16" cy="17.5" r="4.5" fill="currentColor" stroke="none"/><path d="M6 29c0-5 4.5-7 10-7s10 2 10 7z" fill="currentColor" stroke="none"/>`) },
   { id: "자재", color: "#a16207", svg: S(`<path d="M16 3l12 6v14l-12 6-12-6V9z" fill="currentColor" stroke="none"/><path d="M4 9l12 6 12-6M16 15v14" stroke="#fff" stroke-width="1.6"/><path d="M10 6l12 6" stroke="#fff" stroke-width="1.6"/>`) },
+  { id: "사무실", color: "#6366f1", svg: S(`<path d="M3 13l13-8 13 8" stroke-width="2.4"/><rect x="5" y="13" width="22" height="15" rx="1" fill="currentColor" stroke="none"/><rect x="8" y="16" width="5" height="4" fill="#fff" stroke="none"/><rect x="19" y="16" width="5" height="4" fill="#fff" stroke="none"/><rect x="13.5" y="21" width="5" height="7" fill="#fff" stroke="none"/><path d="M2 28h28"/>`) },
+  { id: "세륜기", color: "#0ea5e9", svg: S(`<circle cx="16" cy="21" r="7.5" fill="currentColor" stroke="none"/><circle cx="16" cy="21" r="3" fill="#fff" stroke="none"/><path d="M16 21l0-3M16 21l2.6 1.5M16 21l-2.6 1.5" stroke="currentColor" stroke-width="1.4"/><path d="M8 3.5c1.6 2.4 2.4 3.6 2.4 4.7a2.4 2.4 0 0 1-4.8 0c0-1.1.8-2.3 2.4-4.7zM16 2c1.6 2.4 2.4 3.6 2.4 4.7a2.4 2.4 0 0 1-4.8 0c0-1.1.8-2.3 2.4-4.7zM24 3.5c1.6 2.4 2.4 3.6 2.4 4.7a2.4 2.4 0 0 1-4.8 0c0-1.1.8-2.3 2.4-4.7z" fill="currentColor" stroke="none"/><path d="M3 29h26M4 25.5h3M25 25.5h3" stroke-width="2"/>`) },
 ];
 export const KIND = Object.fromEntries(KINDS.map(k => [k.id, k]));
 export const kindOf = id => KIND[id] || { id: id || "기타", color: "#475569", svg: S(`<circle cx="16" cy="16" r="9" fill="currentColor" stroke="none"/>`) };
@@ -28,7 +30,7 @@ export const kindOf = id => KIND[id] || { id: id || "기타", color: "#475569", 
 export function guessKind(t = "") {
   t = String(t).replace(/\s+/g, "");
   const rules = [[/미니|소형|0\.[0-3]|02W|03W|035/i, "소형굴착기"], [/굴착|굴삭|백호|포크레인|excav/i, "굴착기"], [/타워/, "타워크레인"], [/카고|크레인|기중/, "크레인"], [/덤프/, "덤프트럭"], [/펌프/, "펌프카"],
-    [/레미콘|믹서/, "레미콘"], [/롤러|다짐/, "롤러"], [/항타|천공|어스오거|파일/, "항타기"], [/로더|스키드|밥캣/, "로더"], [/지게|포크리프트/, "지게차"], [/고소|스카이|렌탈|리프트|사다리차/, "고소작업차"]];
+    [/레미콘|믹서/, "레미콘"], [/롤러|다짐/, "롤러"], [/항타|천공|어스오거|파일/, "항타기"], [/로더|스키드|밥캣/, "로더"], [/지게|포크리프트/, "지게차"], [/고소|스카이|렌탈|리프트|사다리차/, "고소작업차"], [/세륜/, "세륜기"]];
   for (const [re, k] of rules) if (re.test(t)) return k;
   return "굴착기";
 }
