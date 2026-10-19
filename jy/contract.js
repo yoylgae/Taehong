@@ -92,14 +92,17 @@ function fillOne(sh, P, O) {
   if (f.months && O.months) { sh.editText(f.months.c, f.months.r, e => e.replace(/\(\s*\d*\s*개월\)/, () => `(  ${O.months} 개월)`)); mark(f.months); }
   if (f.payDay && O.payday) sh.editText(f.payDay.c, f.payDay.r, e => e.replace(/매월\s*\d*\s*일에/, () => `매월  ${O.payday}  일에`));
   // 통장: 양식에 견본 계좌가 적혀 있을 때만 채움
-  const bk = String(P.bank || "").trim(), bm = bk.match(/^(\S+?)(?:은행)?\s+([\d-]+.*)$/), bankName = bm ? bm[1] : "", acct = bm ? bm[2].trim() : bk;
+  // 인적사항의 '은행·계좌' 예) '기업은행 010-9926-4300', '농협 355-0038-8748-03 (메모)'
+  const bk = String(P.bank || "").trim(), bm = bk.match(/^(\S+?)\s+([\d][\d-]*\d)/) || bk.match(/^([\d][\d-]*\d)\s*(\S*)/)?.slice(0, 3).reverse();
+  const bankFull = bm ? String(bm[1] || "").trim() : "", acct = bm ? String(bm[2] || "").trim() : bk, bankName = bankFull.replace(/은행$/, "");
   // 통장구좌 문구 지정(예: '드림인력'): 계좌 자리에 그 글자를 넣고 은행 자리는 비움
   if (P.bankLabel && f.bankSep) {
     const a = f.right(f.bankSep), b = a && f.right(a);
     if (a) { replaceAll(a, P.bankLabel); mark(a); if (b && get(b)) { replaceAll(b, null); mark(b); } }
   } else if (f.bankSep) {
+    // 본인 계좌: 계좌번호 칸 · 은행 칸('○○ 은행)' 앞) — 계좌가 없으면 견본 계좌가 남지 않게 비움
     const a = f.right(f.bankSep), b = a && f.right(a);
-    if (a && get(a)) { replaceAll(a, acct); mark(a); if (b && get(b)) { replaceAll(b, bankName); mark(b); } }
+    if (a) { replaceAll(a, acct || null); mark(a); if (b) { replaceAll(b, bankName || null); mark(b); } }
   }
   // 나머지 글자 칸: 견본 근로자 이름·주민번호·주소·전화를 새 사람 것으로, 빈 서명란에는 이름을 넣음
   // (한 칸 안에서 일부만 굵게·빨강인 서식은 조각별로 그대로 유지)
@@ -120,7 +123,16 @@ function fillOne(sh, P, O) {
       // 빈 서명란: '성명 :          (인)' → 이름은 빈칸(공백) 자리에 넣어 '(인)' 서식은 그대로
       if (!sample.name && P.name) e.replace(/((?:성\s*명|동의|확인자|수령자\s*성명)\s*:?)(\s{3,})(?=\(인\))/g, (m, a) => `${a}     ${spaced(P.name)}     `);
       if (f.bankInline && P.bankLabel && /통장구좌\(/.test(t)) e.replace(/(통장구좌\()([^,]*)(,)/, (m, a, mid, cm) => { const w = Math.max(4, mid.length - P.bankLabel.length * 2); const l = Math.floor(w / 2); return `${a}${" ".repeat(l)}${P.bankLabel}${" ".repeat(w - l)}${cm}`; });
-      else if (f.bankInline && bk && /통장구좌\(\s*[^\s,][^,]*,/.test(t)) e.replace(/통장구좌\([^,]*,[^)]*은행\)/, () => `통장구좌(  ${acct}  ,  ${bankName}  은행)`);
+      else if (f.bankInline && /통장구좌\([^,]*,[^)]*\)/.test(t)) {
+        // 본인 계좌: '통장구좌( 계좌번호 , 은행)' — 빈칸 폭은 최대한 유지
+        e.replace(/(통장구좌\()([^,]*)(,)([^)]*?)(은행)?(\))/, (m, a, mid, cm, mid2, eun, close) => {
+          if (!acct) return `${a}${" ".repeat(Math.max(mid.length, 8))}${cm}${" ".repeat(Math.max(mid2.length, 6))}${eun || ""}${close}`;
+          const w = Math.max(2, mid.length - acct.length), l = Math.floor(w / 2), w2 = Math.max(2, mid2.length - bankFull.length * 2), l2 = Math.floor(w2 / 2);
+          // '국민' → '국민은행', '농협'·'우체국' 등은 그대로
+          const bank = bankFull ? (/은행|뱅크|농협|수협|우체국|금고|신협|증권/.test(bankFull) ? bankFull : bankFull + "은행") : (eun || "");
+          return `${a}${" ".repeat(l)}${acct}${" ".repeat(w - l)}${cm}${" ".repeat(l2)}${bank}${" ".repeat(Math.max(1, w2 - l2))}${close}`;
+        });
+      }
       // '주  소 : ' 처럼 값이 비어 있는 칸 (오른쪽 칸이 비어 있을 때만)
       if (nxEmpty && /:\s*$/.test(t)) {
         const L = K(t.replace(/:\s*$/, ""));

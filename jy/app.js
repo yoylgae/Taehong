@@ -812,7 +812,7 @@ async function rContract() {
           <label>계약기간 <span><input type="date" id="ct-start" value="${esc(c.start)}"> ~ <input type="date" id="ct-end" value="${esc(c.end)}"></span></label>
           <label>임금 지급일 <span>매월 <input id="ct-pay" value="${esc(c.payday ?? "")}" style="width:56px" placeholder="15"> 일 <small class="muted">(비우면 양식 그대로)</small></span></label>
         </div>
-        <p class="hint">일당은 인건비 탭의 단가, 성명·주민번호·주소·전화·통장은 신분증·이수증·통장사본 탭의 인적사항이 들어갑니다. 통장구좌는 <b>직영·하태계·비계를 뺀 모든 사람은 '드림인력'</b>으로 적고, 그 외에는 양식에 계좌 칸이 채워져 있던 경우에만 본인 계좌를 넣습니다.</p>
+        <p class="hint">일당은 인건비 탭의 단가, 성명·주민번호·주소·전화·통장은 신분증·이수증·통장사본 탭의 인적사항이 들어갑니다. 통장구좌는 <b>드림인력은 '드림인력'</b>, <b>직영·하태계·비계는 신분증·이수증·통장사본 탭의 본인 계좌(계좌번호, 은행)</b>로 적습니다.</p>
       </div>
       <div class="card ct-card"><h4>소속별 양식</h4>
         <table class="t imp-t ct-teams"><thead><tr><th>소속</th><th>양식</th><th>근로장소</th><th>공종/수행업무</th><th>소속팀장</th><th>직종</th></tr></thead><tbody>
