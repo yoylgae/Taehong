@@ -1,7 +1,11 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 import { SUPABASE_URL, SUPABASE_KEY } from "./config.js";
 
+import { initRemind, loadRemind } from "./remind.js";
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
+// 접속 비밀번호로 열리는 테이블용 (일정 등)
+let sbt = sb;
+try { const r = await fetch("/__dbtoken", { cache: "no-store" }); const t = r.ok ? (await r.json()).t : ""; if (t) sbt = createClient(SUPABASE_URL, SUPABASE_KEY, { global: { headers: { "x-pms-token": t } }, auth: { persistSession: false, storageKey: "pms-t" } }); } catch {}
 const $ = (s, r = document) => r.querySelector(s);
 const esc = v => String(v ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const toast = msg => { const t = $("#toast"); t.textContent = msg; t.hidden = false; clearTimeout(t._h); t._h = setTimeout(() => t.hidden = true, 2500); };
@@ -156,15 +160,16 @@ async function loadDash() {
   }
 
   const { data, error } = await sb.from("ewp_plans")
-    .select("id,work_name,reg_no,status,created_at,work_start,work_end,in_date")
+    .select("id,work_name,reg_no,status,created_at,work_start,work_end,in_date,equip_type,insur_end,car_insp_end,safe_insp_end")
     .order("created_at", { ascending: false });
-  if (error) return toast("홈 화면 조회 실패: " + error.message);
+  if (error) { loadRemind([]); return toast("홈 화면 조회 실패: " + error.message); }
   const cnt = s => data.filter(r => r.status === s).length;
   $("#k-total").textContent = data.length;
   $("#k-wait").textContent = cnt("상신");
   $("#k-today").textContent = data.filter(r => r.work_start && r.work_end && r.work_start <= today && today <= r.work_end).length;
   $("#k-month").textContent = data.filter(r => (r.in_date || "").startsWith(today.slice(0, 7))).length;
   const nb = $("#nav-wait"); if (nb) { nb.textContent = cnt("상신"); nb.hidden = !cnt("상신"); }
+  loadRemind(data);
 
   const title = r => `${r.work_name || "(무제)"}${r.reg_no ? ` · ${r.reg_no}` : ""}`;
   const recent = data.slice(0, 6);
@@ -181,6 +186,8 @@ addEventListener("message", e => {
   if (e.origin !== location.origin || e.data?.pms !== "open") return;
   if (ITEM[e.data.id]) openTab(e.data.id, e.data.hash);
 });
+
+initRemind({ sb: sbt, toast, openTab });
 
 /* ================= 시작 ================= */
 await loadSite();

@@ -40,3 +40,8 @@
   수정분만 site_map_doc(id=1).edits 에 {add, mod, del, layers, settings} 로 저장 (원본 base.json 은 그대로).
 - **출력** (`map/print.js`, 🖨 · Ctrl+P): 지금 화면/도면 전체, A4·A3, 가로·세로, 말풍선/아이콘만/도면만, 번호+작업 목록 표(2쪽). 도면을 250dpi로 다시 그려 인쇄 창(PDF 저장 가능)으로. 저장 안 한 수정도 그대로 나옴. 축척을 맞췄으면 축척 막대 표시.
 - 두 테이블 모두 RLS `pms_ok()` (접속 비밀번호 쿠키 → /__dbtoken).
+
+## 중요 일정 알리미 (`remind.js`, 홈)
+- 테이블 site_reminders(title, due_date, due_time, remind_days, repeat none/weekly/monthly/yearly, important, done) · RLS pms_ok (셸이 /__dbtoken 으로 토큰 클라이언트 생성).
+- 홈 카드: 지남/오늘/D-n 순서, 체크 = 완료(반복 일정은 다음 날짜로 넘어감). 작업계획서의 보험·자동차검사·안전검사 만료(14일 이내 또는 작업 끝보다 먼저 만료)도 🏗 로 자동 표시.
+- 위쪽 🔔: 확인할 일정 수. 하루 첫 접속 때 '오늘 확인할 일정' 팝업, 시간 넣은 일정은 30분 전·정각에 팝업+소리(+허용 시 바탕화면 알림). 사이트가 열려 있을 때만 동작.
