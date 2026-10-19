@@ -368,13 +368,14 @@ const DEFAULT_RULES = [
   { team: "신호수", type: "fixed", rate: 160000 },
 ];
 const rules = () => (S.month.settings.rateRules ||= DEFAULT_RULES.map(r => ({ ...r })));
-const ruleOf = team => rules().find(x => x.team && x.team === (team || "").trim()) || null;
+const ruleOf = grp => rules().find(x => x.team && x.team === (grp || "").trim()) || null;   // 규칙은 '구분'(드림인력·신호수 …) 기준
+const TEAMS = ["지디", "비계"];
 const ruleRate = (rule, days) => rule.type === "fixed" ? Number(rule.rate) || 0 : days >= (Number(rule.min) || 0) ? Number(rule.hi) || 0 : Number(rule.lo) || 0;
 const ruleText = r => r.type === "fixed" ? `${fmt0(r.rate)}원 고정` : `${r.min}일 이상 ${fmt0(r.hi)}원 · 미만 ${fmt0(r.lo)}원`;
 // 규칙이 있는 소속의 단가를 출역일수에 맞게 다시 정함 (바뀐 줄 수를 돌려줌)
 function applyRates(list = S.rows.labor) {
   let n = 0;
-  list.forEach(r => { const rule = ruleOf(r.data.team); if (!rule) return; const v = ruleRate(rule, sumObj(r.data.d)); if (Number(r.data.rate) !== v) { r.data.rate = v; mark("rows", r); n++; } });
+  list.forEach(r => { const rule = ruleOf(r.data.group); if (!rule) return; const v = ruleRate(rule, sumObj(r.data.d)); if (Number(r.data.rate) !== v) { r.data.rate = v; mark("rows", r); n++; } });
   return n;
 }
 
@@ -382,8 +383,8 @@ function applyRates(list = S.rows.labor) {
 function rLabor() {
   const ym = S.month.ym, rows = sorted("labor"), n = nDays(ym, rows, ["d"]);
   const dl = `<datalist id="dl-workers">${S.workers.map(w => `<option value="${esc(w.name)}">${esc(w.team)}</option>`).join("")}</datalist>`;
-  const teams = [...new Set([...S.rows.labor.map(r => r.data.team), ...S.workers.map(w => w.team)].filter(Boolean))];
-  $("#sheet").innerHTML = `${dl}<datalist id="dl-teams">${teams.map(t => `<option value="${esc(t)}">`).join("")}</datalist>
+  const groups = [...new Set([...rules().map(r => r.team), ...S.rows.labor.map(r => r.data.group)].filter(Boolean))];
+  $("#sheet").innerHTML = `${dl}<datalist id="dl-teams">${TEAMS.map(t => `<option value="${esc(t)}">`).join("")}</datalist><datalist id="dl-groups">${groups.map(t => `<option value="${esc(t)}">`).join("")}</datalist>
     <div class="bar">
       <button class="btn primary" id="l-add">+ 인원 추가</button>
       <label class="btn up" title="업체(인력사무소·협력사)에서 받은 정산 엑셀을 올리면 출역일·공수·단가를 자동으로 채웁니다">📥 업체 정산 엑셀 불러오기<input type="file" accept=".xlsx" multiple id="l-imp"></label>
@@ -394,23 +395,24 @@ function rLabor() {
       <button class="btn" id="l-print">🖨 인쇄</button>
     </div>
     <div class="scroll"><table class="t fit">
-      <thead><tr><th class="stick" style="left:0;width:38px">번호</th><th style="width:76px">소속</th><th style="width:78px">성명</th><th style="width:84px">단가</th>${dayHead(ym, n)}<th style="width:52px">출역<br>일수</th><th style="width:96px">금액</th><th style="width:120px">비고</th><th style="width:76px"></th></tr></thead>
+      <thead><tr><th class="stick" style="left:0;width:38px">번호</th><th style="width:62px">소속</th><th style="width:78px">성명</th><th style="width:84px" title="단가 규칙을 정하는 구분 (드림인력·신호수 …)">구분</th><th style="width:84px">단가</th>${dayHead(ym, n)}<th style="width:52px">출역<br>일수</th><th style="width:96px">금액</th><th style="width:120px">비고</th><th style="width:76px"></th></tr></thead>
       <tbody>${rows.map((r, i) => `<tr>
         <td class="idx stick">${i + 1}</td><td>${inp("rows", r, "data.team", { cls: "mw", ph: "소속" }).replace("<input", '<input list="dl-teams"')}</td>
-        <td>${inp("rows", r, "data.name", { cls: "mw" }).replace("<input", '<input list="dl-workers"')}</td>${ruleOf(r.data.team) ? `<td class="calc auto" title="${esc(r.data.team)} 단가 규칙: ${esc(ruleText(ruleOf(r.data.team)))}"><span data-calc="l-r-${r.id}"></span><small>자동</small></td>` : `<td>${inp("rows", r, "data.rate", { numeric: 1, cls: "mw" })}</td>`}
+        <td>${inp("rows", r, "data.name", { cls: "mw" }).replace("<input", '<input list="dl-workers"')}</td><td>${inp("rows", r, "data.group", { cls: "mw mw2", ph: "구분" }).replace("<input", '<input list="dl-groups"')}</td>
+        ${ruleOf(r.data.group) ? `<td class="calc auto" title="${esc(r.data.group)} 단가 규칙: ${esc(ruleText(ruleOf(r.data.group)))}"><span data-calc="l-r-${r.id}"></span><small>자동</small></td>` : `<td>${inp("rows", r, "data.rate", { numeric: 1, cls: "mw" })}</td>`}
         ${Array.from({ length: n }, (_, k) => dcell(r, "d", k + 1, ym)).join("")}
         <td class="calc" data-calc="l-d-${r.id}" style="text-align:center"></td><td class="calc" data-calc="l-a-${r.id}"></td>
         <td>${inp("rows", r, "data.memo", { cls: "mw" })}</td>
         <td class="del"><button class="x" data-up="${r.id}">▲</button><button class="x" data-dn="${r.id}">▼</button><button class="x" data-del="${r.id}">✕</button></td></tr>`).join("")
-        || `<tr><td colspan="${n + 8}" class="c muted" style="padding:30px">명단이 없습니다. <b>+ 인원 추가</b>로 시작하세요.</td></tr>`}</tbody>
-      <tfoot><tr><td class="stick"></td><td colspan="3" class="c">일별 인원 / 합계</td>${Array.from({ length: n }, (_, k) => `<td class="dsum" data-calc="l-s-${k + 1}"></td>`).join("")}<td class="c" data-calc="l-days"></td><td class="n" data-calc="l-amt"></td><td colspan="2"></td></tr></tfoot>
+        || `<tr><td colspan="${n + 9}" class="c muted" style="padding:30px">명단이 없습니다. <b>+ 인원 추가</b>로 시작하세요.</td></tr>`}</tbody>
+      <tfoot><tr><td class="stick"></td><td colspan="4" class="c">일별 인원 / 합계</td>${Array.from({ length: n }, (_, k) => `<td class="dsum" data-calc="l-s-${k + 1}"></td>`).join("")}<td class="c" data-calc="l-days"></td><td class="n" data-calc="l-amt"></td><td colspan="2"></td></tr></tfoot>
     </table></div>
-    <p class="hint">단가 규칙 — ${rules().map(r => `<b>${esc(r.team)}</b> ${esc(ruleText(r))}`).join(" · ") || "없음"} · 그 밖의 소속(비계·건하이엔지 등)은 사람마다 단가를 직접 입력합니다. 금액 = 출역일수 × 단가</p>`;
+    <p class="hint">소속은 <b>지디 · 비계</b>. 단가는 <b>구분</b>으로 정합니다 — ${rules().map(r => `<b>${esc(r.team)}</b> ${esc(ruleText(r))}`).join(" · ") || "규칙 없음"} · 그 밖의 구분(건하이엔지·비계 등)은 사람마다 단가를 직접 입력합니다. 금액 = 출역일수 × 단가</p>`;
   S.calc = () => {
     applyRates();
     let td = 0, ta = 0; const per = {};
     S.rows.labor.forEach(r => {
-      if (ruleOf(r.data.team)) setCalc("l-r-" + r.id, fmt0(r.data.rate));
+      if (ruleOf(r.data.group)) setCalc("l-r-" + r.id, fmt0(r.data.rate));
       const d = sumObj(r.data.d), a = d * (Number(r.data.rate) || 0); td += d; ta += a;
       setCalc("l-d-" + r.id, d || ""); setCalc("l-a-" + r.id, fmt0(a));
       Object.entries(r.data.d || {}).forEach(([k, v]) => per[k] = (per[k] || 0) + (Number(v) || 0));
@@ -418,7 +420,7 @@ function rLabor() {
     for (let k = 1; k <= n; k++) setCalc("l-s-" + k, per[k] || "");
     setCalc("l-days", td); setCalc("l-amt", fmt0(ta));
   };
-  $("#l-add").onclick = () => { const last = sorted("labor").at(-1); newRow("labor", { team: last?.data.team || "", name: "", rate: last?.data.rate ?? null, d: {}, ded: {}, memo: "" }); rLabor(); S.calc(); focusLast(); };
+  $("#l-add").onclick = () => { const last = sorted("labor").at(-1); newRow("labor", { team: last?.data.team || "지디", group: last?.data.group || "", name: "", rate: last?.data.rate ?? null, d: {}, ded: {}, memo: "" }); rLabor(); S.calc(); focusLast(); };
   $("#l-sort").onclick = () => { const list = sorted("labor"); const order = [...new Set(list.map(r => r.data.team || ""))]; list.sort((a, b) => order.indexOf(a.data.team || "") - order.indexOf(b.data.team || "") || a.sort - b.sort).forEach((r, k) => { r.sort = k + 1; mark("rows", r); }); rLabor(); S.calc(); };
   $("#l-print").onclick = () => P.printLabor(S.month, sorted("labor"));
   $("#l-rules").onclick = rulesDialog;
@@ -427,8 +429,8 @@ function rLabor() {
 }
 // 인건비: 소속을 바꾸면 단가 규칙 적용 여부가 바뀌므로 다시 그림
 document.addEventListener("change", e => {
-  const el = e.target; if (S.sheet !== "labor" || el.dataset?.f !== "data.team") return;
-  const r = findRow(el.dataset.id); if (r && !ruleOf(r.data.team)) { const w = S.workers.find(w => w.name === (r.data.name || "").trim() && w.rate); if (w && !r.data.rate) { r.data.rate = w.rate; mark("rows", r); } }
+  const el = e.target; if (S.sheet !== "labor" || !["data.team", "data.group"].includes(el.dataset?.f)) return;
+  const r = findRow(el.dataset.id); if (r && !ruleOf(r.data.group)) { const w = S.workers.find(w => w.name === (r.data.name || "").trim() && w.rate); if (w && !r.data.rate) { r.data.rate = w.rate; mark("rows", r); } }
   rLabor(); S.calc();
 });
 // 인건비: 이름을 고르면 인적사항의 소속·단가로 채움
@@ -444,12 +446,12 @@ function rulesDialog() {
   let dlg = $("#dlg-rules");
   if (!dlg) { dlg = document.createElement("dialog"); dlg.id = "dlg-rules"; dlg.className = "imp rules"; document.body.append(dlg); }
   const list = rules().map(r => ({ ...r }));
-  const teams = [...new Set(S.rows.labor.map(r => (r.data.team || "").trim()).filter(Boolean))];
+  const teams = [...new Set(S.rows.labor.map(r => (r.data.group || "").trim()).filter(Boolean))];
   const draw = () => {
     dlg.innerHTML = `<form method="dialog">
       <h3>단가 규칙</h3>
-      <p class="hint" style="margin:-8px 0 12px">규칙을 정한 소속은 출역일수에 맞춰 단가가 자동으로 정해집니다. 규칙이 없는 소속은 사람마다 단가를 직접 입력합니다. 새 달을 만들면 규칙도 함께 옮겨 갑니다.</p>
-      <table class="t imp-t"><thead><tr><th>소속</th><th>방식</th><th colspan="3">단가</th><th></th></tr></thead><tbody>
+      <p class="hint" style="margin:-8px 0 12px">인건비 탭의 <b>구분</b> 칸에 규칙 이름(예: 드림인력)이 적힌 사람은 출역일수에 맞춰 단가가 자동으로 정해집니다. 규칙이 없는 구분은 사람마다 단가를 직접 입력합니다. 새 달을 만들면 규칙도 함께 옮겨 갑니다.</p>
+      <table class="t imp-t"><thead><tr><th>구분</th><th>방식</th><th colspan="3">단가</th><th></th></tr></thead><tbody>
       ${list.map((r, i) => `<tr>
         <td><input data-i="${i}" data-k="team" value="${esc(r.team)}" list="dl-rteams" style="width:120px"></td>
         <td><select data-i="${i}" data-k="type"><option value="tier" ${r.type === "tier" ? "selected" : ""}>출역일수 기준</option><option value="fixed" ${r.type === "fixed" ? "selected" : ""}>고정</option></select></td>
@@ -460,7 +462,7 @@ function rulesDialog() {
       </tbody></table>
       <datalist id="dl-rteams">${teams.map(t => `<option value="${esc(t)}">`).join("")}</datalist>
       <button type="button" class="btn sm" id="r-add" style="margin-top:8px">+ 규칙 추가</button>
-      <p class="hint">이 달 소속: ${teams.map(t => `<b>${esc(t)}</b>${list.some(r => r.team === t) ? " (규칙)" : " (직접 입력)"}`).join(" · ") || "-"}</p>
+      <p class="hint">이 달 구분: ${teams.map(t => `<b>${esc(t)}</b>${list.some(r => r.team === t) ? " (규칙)" : " (직접 입력)"}`).join(" · ") || "-"}</p>
       <div class="dlg-btns"><button value="cancel" class="btn">닫기</button><button value="ok" class="btn primary">저장하고 다시 계산</button></div>
     </form>`;
     $$("[data-k]", dlg).forEach(el => el.onchange = () => { const r = list[+el.dataset.i], k = el.dataset.k; r[k] = ["min", "hi", "lo", "rate"].includes(k) ? num(el.value) : el.value.trim(); if (k === "type") { if (r.type === "fixed" && r.rate == null) r.rate = r.lo ?? 160000; if (r.type === "tier") { r.min ??= 8; r.hi ??= 170000; r.lo ??= 160000; } draw(); } });
@@ -502,23 +504,25 @@ async function vendorImport(files) {
     try { jobs.push({ file: f, ...(await parseVendorFile(f, ym)) }); }
     catch (e) { console.error(e); jobs.push({ file: f, error: e.message || String(e) }); }
   }
-  // 소속 기본값: 이미 명단에 있는 사람들의 소속 중 가장 많은 것 → 없으면 파일 이름
-  const guessTeam = (j, sh) => {
-    const cnt = {}; sh.people.forEach(p => S.rows.labor.filter(r => (r.data.name || "").trim() === p.name).forEach(r => { if (r.data.team) cnt[r.data.team] = (cnt[r.data.team] || 0) + 1; }));
-    const best = Object.entries(cnt).sort((a, b) => b[1] - a[1])[0]?.[0];
-    return best || j.file.name.replace(/\.xlsx$/i, "").replace(/[_\s]*(노무비|인건비|정산|근무일지|출역).*$/, "").slice(0, 20);
-  };
-  jobs.forEach(j => { if (!j.error) { j.sel = j.best; j.team = guessTeam(j, j.sheets[j.sel]); j.on = true; } });
+  // 소속은 지디·비계 두 가지: CS(비계) 파일만 비계, 나머지 업체(드림인력·건하이엔지 …)는 모두 지디
+  // 구분(단가 규칙용): 파일 이름 → 이미 명단에 있는 사람들의 구분 → 없음.  사람 이름 옆 괄호(예: 박창현(드림인력))가 있으면 그 사람은 그것으로
+  const majority = (sh, key) => { const cnt = {}; sh.people.forEach(p => S.rows.labor.filter(r => (r.data.name || "").trim() === p.name).forEach(r => { const v = r.data[key]; if (v) cnt[v] = (cnt[v] || 0) + 1; })); return Object.entries(cnt).sort((a, b) => b[1] - a[1])[0]?.[0] || ""; };
+  const isScaffold = (j, sh) => /cs|씨에스|비계/i.test(j.file.name + " " + sh.name) || majority(sh, "team") === "비계";
+  const guessTeam = (j, sh) => isScaffold(j, sh) ? "비계" : "지디";
+  const guessGroup = (j, sh) => { const n = j.file.name + " " + sh.name; return /드림/.test(n) ? "드림인력" : /건하/.test(n) ? "건하이엔지" : isScaffold(j, sh) ? "비계" : majority(sh, "group"); };
+  jobs.forEach(j => { if (!j.error) { j.sel = j.best; j.team = guessTeam(j, j.sheets[j.sel]); j.group = guessGroup(j, j.sheets[j.sel]); j.on = true; } });
+  const noteOnly = p => /드림/.test(p.note) ? "드림인력" : /건하/.test(p.note) ? "건하이엔지" : "";   // 이름 옆 괄호로 확실히 적힌 구분
+  const noteGroup = (p, j) => noteOnly(p) || j.group;
 
   let dlg = $("#dlg-imp");
   if (!dlg) { dlg = document.createElement("dialog"); dlg.id = "dlg-imp"; dlg.className = "imp"; document.body.append(dlg); }
   const days = d => Object.values(d || {}).reduce((a, b) => a + b, 0);
-  const statusOf = (p, team) => {
+  const statusOf = (p, team, group) => {
     const same = S.rows.labor.filter(r => (r.data.name || "").trim() === p.name);
     const sum = days(p.d), warn = [];
     if (p.gong != null && Math.abs(p.gong - sum) > 0.001) warn.push(`파일 공수 ${p.gong} ≠ 날짜 합 ${sum}`);
     if (p.amt != null && p.rate != null && Math.abs(p.amt - sum * p.rate) > 1) warn.push(`파일 금액 ${fmt0(p.amt)} ≠ 공수×단가 ${fmt0(sum * p.rate)}`);
-    const tgt = same.find(r => r.data.team === team) || same[0];
+    const tgt = (group && same.find(r => r.data.group === group)) || same.find(r => r.data.team === team && !r.data.group) || same.find(r => r.data.team === team) || same[0];
     return { tgt, sum, warn, isNew: !tgt, old: tgt ? days(tgt.data.d) : 0 };
   };
   const draw = () => {
@@ -527,28 +531,31 @@ async function vendorImport(files) {
       <p class="hint" style="margin:-8px 0 12px">사람 이름으로 인건비 명단과 맞춰서 <b>출역일(날짜 칸)·단가</b>를 파일 내용으로 바꿉니다. 명단에 없는 사람은 새로 추가합니다. 공제 금액이 있으면 노무비명세서에도 넣습니다.</p>
       ${jobs.map((j, ji) => j.error ? `<div class="imp-file err"><b>${esc(j.file.name)}</b><div class="ng">읽지 못했습니다 — ${esc(j.error)}</div></div>` : (() => {
         const sh = j.sheets[j.sel];
-        const rows = sh.people.map(p => ({ p, st: statusOf(p, j.team) }));
+        const rows = sh.people.map(p => ({ p, st: statusOf(p, j.team, noteOnly(p)) }));
         const tot = rows.reduce((a, { p, st }) => (a.d += st.sum, a.a += p.amt ?? st.sum * (p.rate || 0), a), { d: 0, a: 0 });
         return `<div class="imp-file">
           <div class="imp-h"><label class="chk"><input type="checkbox" data-on="${ji}" ${j.on ? "checked" : ""}> <b>${esc(j.file.name)}</b></label>
             <label>시트 <select data-sheet="${ji}">${j.sheets.map((s, si) => `<option value="${si}" ${si === j.sel ? "selected" : ""}>${esc(s.name)}${s.ym ? ` (${s.ym})` : ""}</option>`).join("")}</select></label>
-            <label>새 사람 소속 <input data-team="${ji}" value="${esc(j.team)}" style="width:120px"></label>
+            <label>소속 <select data-team="${ji}">${TEAMS.map(t => `<option ${t === j.team ? "selected" : ""}>${t}</option>`).join("")}</select></label>
+            <label>구분 <input data-group="${ji}" value="${esc(j.group)}" list="dl-igroups" style="width:110px" placeholder="예: 드림인력"></label>
             <span class="grow"></span><span class="sum-chip">${rows.length}명 · ${tot.d}공수 · ${fmt0(tot.a)}원</span></div>
           ${sh.ym && sh.ym !== ym ? `<div class="imp-warn">⚠ 이 시트는 <b>${esc(sh.ym)}</b> 자료로 보입니다. 지금 화면은 ${esc(ym)} 입니다. 맞는지 확인해 주세요.</div>` : ""}
           <table class="t imp-t"><thead><tr><th>성명</th><th>구분</th><th>공수</th><th>단가</th><th>금액</th><th>출역일</th><th>확인</th></tr></thead><tbody>
           ${rows.map(({ p, st }) => `<tr>
             <td class="c"><b>${esc(p.name)}</b>${p.note ? `<div class="muted" style="font-size:11px">${esc(p.note)}</div>` : ""}</td>
-            <td class="c">${st.isNew ? '<span class="st new">새로 추가</span>' : `<span class="st">${esc(st.tgt.data.team || "")} 갱신</span>${st.old !== st.sum ? `<div class="muted" style="font-size:11px">${st.old} → ${st.sum}</div>` : ""}`}</td>
+            <td class="c">${(() => { const g = st.isNew ? noteGroup(p, j) : (noteOnly(p) || st.tgt.data.group); return g ? `<div style="font-size:11px;color:#374151">${esc(g)}</div>` : ""; })()}${st.isNew ? '<span class="st new">새로 추가</span>' : `<span class="st">${esc(st.tgt.data.team || "")} 갱신</span>${st.old !== st.sum ? `<div class="muted" style="font-size:11px">${st.old} → ${st.sum}</div>` : ""}`}</td>
             <td class="c">${st.sum}</td><td class="n">${fmt(p.rate)}</td><td class="n">${fmt0(p.amt ?? st.sum * (p.rate || 0))}</td>
             <td class="days">${Object.entries(p.d).map(([d, v]) => `<span class="${v == 0.5 ? "h" : ""}">${d}</span>`).join("")}</td>
             <td>${st.warn.length ? `<span class="ng" style="font-size:12px">⚠ ${esc(st.warn.join(" / "))}</span>` : '<span class="ok">✓</span>'}</td></tr>`).join("")}
           </tbody></table></div>`;
       })()).join("")}
+      <datalist id="dl-igroups">${[...new Set([...rules().map(r => r.team), "건하이엔지", "비계"])].map(g => `<option value="${esc(g)}">`).join("")}</datalist>
       <label class="chk" style="margin-top:6px"><input type="checkbox" id="imp-workers" checked> 인적사항(신분증·이수증·통장사본 탭)에 없는 사람은 추가하고, 비어 있는 주민번호·주소·전화번호를 채우기</label>
       <div class="dlg-btns"><button value="cancel" class="btn">닫기</button><button value="ok" class="btn primary" ${jobs.some(j => !j.error && j.on) ? "" : "disabled"}>인건비에 반영</button></div>
     </form>`;
-    $$("[data-sheet]", dlg).forEach(el => el.onchange = () => { const j = jobs[+el.dataset.sheet]; j.sel = +el.value; j.team = guessTeam(j, j.sheets[j.sel]); draw(); });
+    $$("[data-sheet]", dlg).forEach(el => el.onchange = () => { const j = jobs[+el.dataset.sheet]; j.sel = +el.value; j.team = guessTeam(j, j.sheets[j.sel]); j.group = guessGroup(j, j.sheets[j.sel]); draw(); });
     $$("[data-team]", dlg).forEach(el => el.onchange = () => { jobs[+el.dataset.team].team = el.value.trim(); draw(); });
+    $$("[data-group]", dlg).forEach(el => el.onchange = () => { jobs[+el.dataset.group].group = el.value.trim(); draw(); });
     $$("[data-on]", dlg).forEach(el => el.onchange = () => { jobs[+el.dataset.on].on = el.checked; draw(); });
   };
   draw();
@@ -560,17 +567,18 @@ async function vendorImport(files) {
     for (const j of jobs) {
       if (j.error || !j.on) continue;
       for (const p of j.sheets[j.sel].people) {
-        const st = statusOf(p, j.team);
-        // 같은 사람이 두 업체 파일에 다 나오면 앞 파일 내용을 덮어쓰지 않고 소속별로 따로 한 줄 추가
-        if (st.tgt && used.has(st.tgt.id)) st.tgt = S.rows.labor.find(r => !used.has(r.id) && (r.data.name || "").trim() === p.name && r.data.team === j.team);
+        const grp = noteGroup(p, j), st = statusOf(p, j.team, noteOnly(p));
+        // 같은 사람이 두 업체 파일에 다 나오면 앞 파일 내용을 덮어쓰지 않고 따로 한 줄 추가
+        if (st.tgt && used.has(st.tgt.id)) st.tgt = S.rows.labor.find(r => !used.has(r.id) && (r.data.name || "").trim() === p.name && (r.data.group || "") === grp);
         if (st.tgt) {
           used.add(st.tgt.id);
+          st.tgt.data.team = j.team; if (noteOnly(p) || !st.tgt.data.group) st.tgt.data.group = grp;   // 이미 구분이 있는 사람은 그대로
           st.tgt.data.d = { ...p.d };
           if (p.rate) st.tgt.data.rate = p.rate;
           if (Object.keys(p.ded).length) st.tgt.data.ded = { ...(st.tgt.data.ded || {}), ...p.ded };
           mark("rows", st.tgt); upd++;
         } else {
-          used.add(newRow("labor", { team: j.team, name: p.name, rate: p.rate, d: { ...p.d }, ded: { ...p.ded }, memo: p.note || "" }).id); add++;
+          used.add(newRow("labor", { team: j.team, group: grp, name: p.name, rate: p.rate, d: { ...p.d }, ded: { ...p.ded }, memo: p.note || "" }).id); add++;
         }
         if (fillWorkers) {
           const w = S.workers.find(x => x.name === p.name && (!x.team || x.team === j.team)) || S.workers.find(x => x.name === p.name);
