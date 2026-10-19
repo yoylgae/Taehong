@@ -92,15 +92,43 @@ function nDays(ym, rows, keys) {
   rows.forEach(r => keys.forEach(k => Object.keys(r.data[k] || {}).forEach(d => { if (+d > n && r.data[k][d]) n = Math.min(31, +d); })));
   return n;
 }
-function dayHead(ym, n = lastDay(ym)) {
+/* ---------- 휴일 (공휴일·대체공휴일·현장 휴일) ---------- */
+// 달마다 settings.holidays = { 날짜: 이름 }. 처음 열 때 아래 법정 공휴일(대체공휴일 포함)을 미리 넣고, 날짜 머리글을 눌러 더하거나 뺄 수 있음.
+const KR_HOLIDAYS = {
+  "2026-01-01": "신정", "2026-02-16": "설날 연휴", "2026-02-17": "설날", "2026-02-18": "설날 연휴", "2026-03-01": "삼일절", "2026-03-02": "대체공휴일(삼일절)",
+  "2026-05-05": "어린이날", "2026-05-24": "부처님오신날", "2026-05-25": "대체공휴일(부처님오신날)", "2026-06-03": "전국동시지방선거", "2026-06-06": "현충일",
+  "2026-08-15": "광복절", "2026-08-17": "대체공휴일(광복절)", "2026-09-24": "추석 연휴", "2026-09-25": "추석", "2026-09-26": "추석 연휴", "2026-09-28": "대체공휴일(추석)",
+  "2026-10-03": "개천절", "2026-10-05": "대체공휴일(개천절)", "2026-10-09": "한글날", "2026-12-25": "성탄절",
+};
+function holidays() {
+  const st = S.month.settings;
+  if (!st.holidays) {
+    st.holidays = {};
+    for (const [k, v] of Object.entries(KR_HOLIDAYS)) if (k.startsWith(S.month.ym + "-")) st.holidays[+k.slice(8)] = v;
+    mark("month");
+  }
+  return st.holidays;
+}
+const holName = d => S.month ? holidays()[d] : undefined;
+function dayHead(ym, n = lastDay(ym), clickable = false) {
   const last = lastDay(ym); let h = "";
   for (let d = 1; d <= n; d++) {
     if (d > last) { h += `<th class="day" title="이 달에는 없는 날짜입니다 (엑셀에서 넘어온 값)">${d}<small>-</small></th>`; continue; }
-    const w = wday(ym, d); h += `<th class="day ${w === 6 ? "sat" : w === 0 ? "sun" : ""}">${d}<small>${WD[w]}</small></th>`;
+    const w = wday(ym, d), hn = holName(d);
+    const tip = hn ? `${hn}${clickable ? " — 누르면 휴일 해제" : ""}` : clickable ? "누르면 휴일로 지정" : "";
+    h += `<th class="day ${w === 6 ? "sat" : w === 0 ? "sun" : ""} ${hn ? "hol" : ""} ${clickable ? "pick" : ""}" ${clickable ? `data-hol="${d}"` : ""} title="${esc(tip)}">${d}<small>${hn ? "휴" : WD[w]}</small></th>`;
   }
   return h;
 }
-const isWe = (ym, d) => { if (d > lastDay(ym)) return true; const w = wday(ym, d); return w === 0 || w === 6; };
+const isWe = (ym, d) => { if (d > lastDay(ym)) return true; const w = wday(ym, d); return w === 0 || w === 6 || !!holName(d); };
+// 날짜 머리글을 눌러 휴일 지정/해제 (인건비 탭)
+document.addEventListener("click", e => {
+  const th = e.target.closest("th[data-hol]"); if (!th || S.sheet !== "labor") return;
+  const d = +th.dataset.hol, hs = holidays(), { m } = ymParts(S.month.ym);
+  if (hs[d]) { if (!confirm(`${m}월 ${d}일 「${hs[d]}」 휴일을 해제할까요?`)) return; delete hs[d]; }
+  else { const nm = prompt(`${m}월 ${d}일을 휴일로 지정합니다. 이름을 적어 주세요.`, "대체공휴일"); if (nm == null) return; hs[d] = nm.trim() || "휴일"; }
+  mark("month"); rLabor(); S.calc?.();
+});
 const sumObj = o => Object.values(o || {}).reduce((a, b) => a + (Number(b) || 0), 0);
 
 /* ================= 데이터 불러오기 ================= */
@@ -359,9 +387,10 @@ function bindRowOps(sheet, rerender) {
       // 만근: 일요일을 뺀 이 달 모든 날을 1로 (이미 적힌 0.5 등도 1로 바뀜)
       const r = findRow(b.dataset.full); if (!r) return;
       const ym = S.month.ym, last = lastDay(ym), d = {};
-      for (let k = 1; k <= last; k++) if (wday(ym, k) !== 0) d[k] = 1;
+      const hs = holidays();
+      for (let k = 1; k <= last; k++) if (wday(ym, k) !== 0 && !hs[k]) d[k] = 1;
       const had = sumObj(r.data.d);
-      if (had && !confirm(`「${r.data.name || "이 사람"}」의 출역일(${had}일)을 만근(${Object.keys(d).length}일, 일요일 제외)으로 바꿀까요?`)) return;
+      if (had && !confirm(`「${r.data.name || "이 사람"}」의 출역일(${had}일)을 만근(${Object.keys(d).length}일, 일요일·휴일 제외)으로 바꿀까요?`)) return;
       r.data.d = d; mark("rows", r); rerender(); S.calc?.();
       toast(`${r.data.name || ""} 만근 ${Object.keys(d).length}일로 채웠습니다.`);
     }
@@ -410,12 +439,12 @@ function rLabor() {
       <label class="btn up" title="업체(인력사무소·협력사)에서 받은 정산 엑셀을 올리면 출역일·공수·단가를 자동으로 채웁니다">📥 업체 정산 엑셀 불러오기<input type="file" accept=".xlsx" multiple id="l-imp"></label>
       <button class="btn" id="l-sort" title="구분(직영 → 건하이엔지 → 드림인력 → 비계) 순서, 같은 구분 안에서는 이름 가나다순">정렬</button>
       <button class="btn" id="l-rules" title="${esc(rules().map(r => `${r.team}: ${ruleText(r)}`).join("\n"))}">⚙ 단가 규칙</button>
-      <span class="muted" style="font-size:12px">날짜 칸을 누르면 <b style="color:#1e40af">1</b> → <b style="color:#b45309">0.5</b> → 빈칸 순서로 바뀝니다.</span>
+      <span class="muted" style="font-size:12px">날짜 칸을 누르면 <b style="color:#1e40af">1</b> → <b style="color:#b45309">0.5</b> → 빈칸. <b>날짜 머리글</b>을 누르면 휴일 지정/해제.</span>
       <span class="grow"></span><span class="sum-chip">출역 <span data-calc="l-days"></span>일 · <span data-calc="l-amt"></span>원</span>
       <button class="btn" id="l-print">🖨 인쇄</button>
     </div>
     <div class="scroll"><table class="t fit">
-      <thead><tr><th class="stick" style="left:0;width:38px">번호</th><th style="width:62px">소속</th><th style="width:78px">성명</th><th style="width:84px" title="단가 규칙을 정하는 구분 (직영·드림인력 …)">구분</th><th style="width:84px">단가</th>${dayHead(ym, n)}<th style="width:52px">출역<br>일수</th><th style="width:96px">금액</th><th style="width:120px">비고</th><th style="width:118px"></th></tr></thead>
+      <thead><tr><th class="stick" style="left:0;width:38px">번호</th><th style="width:62px">소속</th><th style="width:78px">성명</th><th style="width:84px" title="단가 규칙을 정하는 구분 (직영·드림인력 …)">구분</th><th style="width:84px">단가</th>${dayHead(ym, n, true)}<th style="width:52px">출역<br>일수</th><th style="width:96px">금액</th><th style="width:120px">비고</th><th style="width:118px"></th></tr></thead>
       <tbody>${rows.map((r, i) => `<tr>
         <td class="idx stick">${i + 1}</td><td>${inp("rows", r, "data.team", { cls: "mw", ph: "소속" }).replace("<input", '<input list="dl-teams"')}</td>
         <td>${inp("rows", r, "data.name", { cls: "mw" }).replace("<input", '<input list="dl-workers"')}</td><td>${inp("rows", r, "data.group", { cls: "mw mw2", ph: "구분" }).replace("<input", '<input list="dl-groups"')}</td>
@@ -423,11 +452,12 @@ function rLabor() {
         ${Array.from({ length: n }, (_, k) => dcell(r, "d", k + 1, ym)).join("")}
         <td class="calc" data-calc="l-d-${r.id}" style="text-align:center"></td><td class="calc" data-calc="l-a-${r.id}"></td>
         <td>${inp("rows", r, "data.memo", { cls: "mw" })}</td>
-        <td class="del del-w"><button class="x mg" data-full="${r.id}" title="만근: 일요일을 뺀 이 달 모든 날 1">만근</button><button class="x" data-up="${r.id}">▲</button><button class="x" data-dn="${r.id}">▼</button><button class="x" data-del="${r.id}">✕</button></td></tr>`).join("")
+        <td class="del del-w"><button class="x mg" data-full="${r.id}" title="만근: 일요일과 휴일을 뺀 이 달 모든 날 1">만근</button><button class="x" data-up="${r.id}">▲</button><button class="x" data-dn="${r.id}">▼</button><button class="x" data-del="${r.id}">✕</button></td></tr>`).join("")
         || `<tr><td colspan="${n + 9}" class="c muted" style="padding:30px">명단이 없습니다. <b>+ 인원 추가</b>로 시작하세요.</td></tr>`}</tbody>
       <tfoot><tr><td class="stick"></td><td colspan="4" class="c">일별 인원 / 합계</td>${Array.from({ length: n }, (_, k) => `<td class="dsum" data-calc="l-s-${k + 1}"></td>`).join("")}<td class="c" data-calc="l-days"></td><td class="n" data-calc="l-amt"></td><td colspan="2"></td></tr></tfoot>
     </table></div>
-    <p class="hint">소속은 <b>지디 · 비계</b>. 단가는 <b>구분</b>으로 정합니다 — ${rules().map(r => `<b>${esc(r.team)}</b> ${esc(ruleText(r))}`).join(" · ") || "규칙 없음"} · 그 밖의 구분(건하이엔지·비계 등)은 사람마다 단가를 직접 입력합니다. 금액 = 출역일수 × 단가</p>`;
+    <p class="hint">소속은 <b>지디 · 비계</b>. 단가는 <b>구분</b>으로 정합니다 — ${rules().map(r => `<b>${esc(r.team)}</b> ${esc(ruleText(r))}`).join(" · ") || "규칙 없음"} · 그 밖의 구분(건하이엔지·비계 등)은 사람마다 단가를 직접 입력합니다. 금액 = 출역일수 × 단가</p>
+    <p class="hint hol-list">이 달 휴일: ${Object.entries(holidays()).sort((a, b) => a[0] - b[0]).map(([d, n]) => `${d}일 ${esc(n)}`).join(" · ") || "없음"} <span class="muted">(날짜 머리글을 눌러 지정/해제 · 만근은 일요일과 휴일을 뺀 날)</span></p>`;
   S.calc = () => {
     applyRates();
     let td = 0, ta = 0; const per = {};

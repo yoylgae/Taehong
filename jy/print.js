@@ -31,7 +31,7 @@ function open(title, body, { landscape = false, css = "" } = {}) {
 <script>const im=[...document.images];Promise.all(im.map(i=>i.complete?0:new Promise(r=>{i.onload=i.onerror=r;}))).then(()=>{window.focus();window.print();});<\/script></body></html>`);
   w.document.close();
 }
-const dayHead = (ym, to) => { const { y, m, n } = ymP(ym); let h = ""; for (let d = 1; d <= to; d++) { if (d > n) { h += `<th>${d}<br>-</th>`; continue; } const w = new Date(y, m - 1, d).getDay(); h += `<th class="${w === 6 ? "sat" : w === 0 ? "sun" : ""}">${d}<br><span style="font-weight:400">${WD[w]}</span></th>`; } return h; };
+const dayHead = (ym, to, hol = {}) => { const { y, m, n } = ymP(ym); let h = ""; for (let d = 1; d <= to; d++) { if (d > n) { h += `<th>${d}<br>-</th>`; continue; } const w = new Date(y, m - 1, d).getDay(); h += `<th class="${hol[d] ? "sun" : w === 6 ? "sat" : w === 0 ? "sun" : ""}" title="${hol[d] || ""}">${d}<br><span style="font-weight:400">${hol[d] ? "휴" : WD[w]}</span></th>`; } return h; };
 const nDays = (ym, rows, keys) => { let n = ymP(ym).n; rows.forEach(r => keys.forEach(k => Object.keys(r.data[k] || {}).forEach(d => { if (+d > n && r.data[k][d]) n = Math.min(31, +d); }))); return n; };
 const dv = v => v ? (v == 0.5 ? "0.5" : v) : "";
 
@@ -62,7 +62,7 @@ export function printLabor(m, rows) {
     return `<tr><td class="c">${i + 1}</td><td class="c">${esc(r.data.team)}</td><td class="c">${esc(r.data.name)}</td>${Array.from({ length: n }, (_, k) => `<td class="c">${dv(r.data.d?.[k + 1])}</td>`).join("")}<td class="c">${d || ""}</td><td class="r">${f0(a)}</td><td>${esc(r.data.memo)}</td></tr>`; }).join("");
   open("인력 출력 현황", `<div class="ttl">인력 출력 현황</div><div class="sub"><span>현장명 : ${esc(m.site)}</span><span>${mm}월</span></div>
     <table style="font-size:8.5px"><colgroup><col style="width:24px"><col style="width:42px"><col style="width:46px">${`<col>`.repeat(n)}<col style="width:30px"><col style="width:64px"><col style="width:60px"></colgroup>
-    <thead><tr><th rowspan="2">번호</th><th rowspan="2">소속</th><th rowspan="2">성명</th><th colspan="${n}">${mm}월</th><th rowspan="2">출역<br>일수</th><th rowspan="2">금액</th><th rowspan="2">비고</th></tr><tr>${dayHead(m.ym, n)}</tr></thead>
+    <thead><tr><th rowspan="2">번호</th><th rowspan="2">소속</th><th rowspan="2">성명</th><th colspan="${n}">${mm}월</th><th rowspan="2">출역<br>일수</th><th rowspan="2">금액</th><th rowspan="2">비고</th></tr><tr>${dayHead(m.ym, n, m.settings.holidays || {})}</tr></thead>
     <tbody>${body}<tr class="tot"><td colspan="3" class="c">합 계</td>${Array.from({ length: n }, (_, k) => `<td class="c">${per[k + 1] || ""}</td>`).join("")}<td class="c">${td}</td><td class="r">${f0(ta)}</td><td></td></tr></tbody></table>`, { landscape: true });
 }
 
@@ -75,7 +75,7 @@ export function printMeal(m, rows) {
     return `<tr><td class="c" rowspan="2">${i + 1}</td><td class="c" rowspan="2">${esc(r.data.name)}</td><td class="c" rowspan="2">${esc(r.data.team)}</td><td class="c">조</td>${cells("jo")}<td class="c" rowspan="2">${c || ""}</td><td class="r" rowspan="2">${f0(c * price)}</td><td rowspan="2">${esc(r.data.memo)}</td></tr><tr><td class="c">중</td>${cells("jung")}</tr>`; }).join("");
   open("식비 현황", `<div class="ttl">식 비 현 황</div><div class="sub"><span>㈜지디건설 &nbsp; 현장명 : ${esc(m.site)}</span><span>1식 ${f0(price)}원</span></div>
     <table style="font-size:8.5px"><colgroup><col style="width:22px"><col style="width:46px"><col style="width:40px"><col style="width:18px">${`<col>`.repeat(n)}<col style="width:28px"><col style="width:60px"><col style="width:50px"></colgroup>
-    <thead><tr><th rowspan="2">기호</th><th rowspan="2">이 름</th><th rowspan="2">소속</th><th>월</th><th colspan="${n}">${mm}월</th><th rowspan="2">합계</th><th rowspan="2">금 액</th><th rowspan="2">비 고</th></tr><tr><th>일</th>${dayHead(m.ym, n)}</tr></thead>
+    <thead><tr><th rowspan="2">기호</th><th rowspan="2">이 름</th><th rowspan="2">소속</th><th>월</th><th colspan="${n}">${mm}월</th><th rowspan="2">합계</th><th rowspan="2">금 액</th><th rowspan="2">비 고</th></tr><tr><th>일</th>${dayHead(m.ym, n, m.settings.holidays || {})}</tr></thead>
     <tbody>${body}<tr class="tot"><td colspan="4" class="c">소 계</td>${Array.from({ length: n }, (_, k) => `<td class="c">${per[k + 1] || ""}</td>`).join("")}<td class="c">${tc}</td><td class="r">${f0(tc * price)}</td><td></td></tr></tbody></table>`, { landscape: true });
 }
 
