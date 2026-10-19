@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PDF 편집·분할</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+  <div class="head">
+    <div>
+      <h1>PDF 편집·분할</h1>
+      <p class="sub">PDF를 올려 페이지를 나누거나, 여러 PDF를 하나로 합치고, 순서·회전·삭제를 정리합니다. 파일은 서버에 올라가지 않고 이 컴퓨터 브라우저 안에서만 처리됩니다.</p>
+    </div>
+    <label class="btn primary up">+ PDF 추가<input type="file" id="pick" accept="application/pdf,.pdf" multiple></label>
+  </div>
+
+  <section id="files" class="files" hidden></section>
+
+  <section id="drop" class="drop">
+    <div class="drop-in">
+      <div class="big">📄</div>
+      <b>PDF 파일을 여기에 끌어다 놓으세요</b>
+      <span>여러 개를 한꺼번에 올리면 올린 순서대로 이어 붙습니다</span>
+    </div>
+  </section>
+
+  <section id="work" hidden>
+    <div class="bar">
+      <button class="btn" id="sel-all">전체 선택</button>
+      <button class="btn" id="sel-none">선택 해제</button>
+      <span class="sep"></span>
+      <button class="btn" id="rot-l" title="선택한 페이지 왼쪽으로 90°">⟲ 회전</button>
+      <button class="btn" id="rot-r" title="선택한 페이지 오른쪽으로 90°">⟳ 회전</button>
+      <button class="btn danger" id="del" title="선택한 페이지를 목록에서 뺍니다 (원본 파일은 그대로)">선택 페이지 빼기</button>
+      <span class="grow"></span>
+      <span class="info" id="info"></span>
+      <button class="btn ghost" id="clear">모두 비우기</button>
+    </div>
+
+    <div class="actions">
+      <div class="act">
+        <h3>합치기</h3>
+        <p>지금 보이는 순서대로 모든 페이지를 PDF 하나로 저장합니다.</p>
+        <button class="btn primary" id="do-merge">📥 하나로 합쳐 저장</button>
+      </div>
+      <div class="act">
+        <h3>골라서 저장</h3>
+        <p>선택한 페이지(<b id="sel-n">0</b>장)만 새 PDF로 저장합니다.</p>
+        <button class="btn" id="do-sel">📥 선택한 페이지 저장</button>
+      </div>
+      <div class="act">
+        <h3>나누기</h3>
+        <p>한 페이지씩, 또는 범위를 적어 여러 PDF로 나눕니다. 여러 개는 ZIP으로 받습니다.</p>
+        <div class="row">
+          <button class="btn" id="do-each">📥 한 페이지씩 나누기</button>
+        </div>
+        <div class="row">
+          <input id="ranges" placeholder="예: 1-3, 4, 5-8" title="아래 페이지 번호 기준. 쉼표로 나눈 묶음마다 PDF 하나">
+          <button class="btn" id="do-range">📥 범위로 나누기</button>
+        </div>
+      </div>
+      <div class="act name">
+        <h3>저장 이름</h3>
+        <input id="outname" placeholder="저장할 파일 이름">
+        <p class="muted">나눌 때는 이름 뒤에 _1, _2 … 또는 _p3 이 붙습니다.</p>
+      </div>
+    </div>
+
+    <p class="hint">페이지를 <b>누르면 선택</b>, Shift를 누른 채 누르면 범위 선택. <b>끌어서 순서를 바꿀 수</b> 있습니다. 카드 위 버튼으로 한 장씩 회전·빼기도 됩니다.</p>
+    <div id="grid" class="grid"></div>
+  </section>
+</main>
+<div id="busy" hidden><div><span class="spin"></span><b id="busy-t">처리 중…</b></div></div>
+<div id="toast" hidden></div>
+<script type="module" src="app.js"></script>
+</body>
+</html>

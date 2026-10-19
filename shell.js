@@ -21,6 +21,9 @@ const MENUS = [
     { id: "ewp", name: "건설장비 작업계획서", icon: "🏗", url: "ewp/" },
     { id: "safetycost", name: "산업안전보건관리비", icon: "💰", url: "https://safetycost-gdenc.vercel.app/", newWindow: true },
   ] },
+  { name: "편의기능", items: [
+    { id: "pdf", name: "PDF 편집·분할", icon: "📄", url: "tools/pdf/" },
+  ] },
   { name: "현대건설 일일퀘스트", items: [
     { id: "q-dabs", name: "DABs 회의자료 취합", icon: "📝", url: "https://dabs-meeting.vercel.app/", newWindow: true },
     { id: "q-risk", name: "위험성평가 회의관리", icon: "⚠️", url: "https://hdec-yunsik.github.io/risk-meeting-web/", newWindow: true,
