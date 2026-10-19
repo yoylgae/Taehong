@@ -574,6 +574,232 @@ async function fillMat(book, D, notes) {
   notes.push(`자재구입: ${D.mat.length}건 채움`);
 }
 
+/* ================= 신분증·이수증·통장사본 (인적사항 + 사진) ================= */
+const R_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+const PKG_NS = "http://schemas.openxmlformats.org/package/2006/relationships";
+const XDR_NS = "http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing";
+const A_NS = "http://schemas.openxmlformats.org/drawingml/2006/main";
+const T_DRAWING = R_NS + "/drawing", T_IMAGE = R_NS + "/image";
+const xmlEsc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+const parseX = s => new DOMParser().parseFromString(s, "application/xml");
+const serX = d => '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n' + new XMLSerializer().serializeToString(d).replace(/^<\?xml[^>]*\?>\s*/, "");
+const relsPath = p => p.replace(/([^/]+)$/, "_rels/$1.rels");
+const resolve = (base, t) => { if (t.startsWith("/")) return t.slice(1); const a = base.split("/").slice(0, -1); for (const s of t.split("/")) { if (s === "..") a.pop(); else if (s !== ".") a.push(s); } return a.join("/"); };
+const relTo = (from, to) => { const f = from.split("/").slice(0, -1), t = to.split("/"); let i = 0; while (i < f.length && f[i] === t[i]) i++; return [...f.slice(i).map(() => ".."), ...t.slice(i)].join("/"); };
+
+// 열 너비(글자 수) → 픽셀. 기본 글꼴의 숫자 폭(맑은 고딕 11pt ≈ 8px, Calibri 11pt ≈ 7px)
+async function sheetGeom(book, sh) {
+  let mdw = 8;
+  try {
+    const st = parseX(await book.zip.text("xl/styles.xml"));
+    const f = st.getElementsByTagNameNS(NS, "font")[0];
+    const sz = Number(f?.getElementsByTagNameNS(NS, "sz")[0]?.getAttribute("val")) || 11;
+    const nm = f?.getElementsByTagNameNS(NS, "name")[0]?.getAttribute("val") || "";
+    mdw = Math.max(5, Math.round(sz * (/[가-힣]|malgun|gulim|dotum|batang/i.test(nm) ? 0.73 : 0.64)));
+  } catch {}
+  const fmt = sh.doc.getElementsByTagNameNS(NS, "sheetFormatPr")[0];
+  const defW = Number(fmt?.getAttribute("defaultColWidth")) || (Number(fmt?.getAttribute("baseColWidth")) || 8) + 0.71;
+  const defH = Number(fmt?.getAttribute("defaultRowHeight")) || 15;
+  const cols = [...sh.doc.getElementsByTagNameNS(NS, "col")].map(c => ({ a: +c.getAttribute("min"), b: +c.getAttribute("max"), w: Number(c.getAttribute("width")), hid: ["1", "true"].includes(c.getAttribute("hidden")) }));
+  const px = w => Math.trunc(((256 * w + Math.trunc(128 / mdw)) / 256) * mdw);
+  const colEmu = c => { const k = cols.find(x => c >= x.a && c <= x.b); return k?.hid ? 0 : px(k && k.w ? k.w : defW) * 9525; };
+  const rowEmu = r => { const el = sh.rows.get(r)?.el; if (el && ["1", "true"].includes(el.getAttribute("hidden"))) return 0; return Math.round((Number(el?.getAttribute("ht")) || defH) * 12700); };
+  // 시작 칸(c0,r0) 왼쪽 위에서 dx,dy EMU 떨어진 곳 → (칸, 칸 안 위치)
+  const walk = (start, d, size) => { let i = start; while (d > 0 && size(i) > 0 && d >= size(i)) { d -= size(i); i++; } return { i, off: Math.max(0, Math.round(d)) }; };
+  return { colEmu, rowEmu, walk };
+}
+
+async function fillIds(book, D, notes) {
+  const name = book.find(n => /신분증/.test(n));
+  if (!name || !D.ids) return;
+  if (!D.ids.length) { notes.push("신분증·이수증·통장사본: 이번 달 명단에 사람이 없어 양식 그대로 둡니다."); return; }
+  const sh = await book.sheet(name);
+  const merges = () => sh.mergeRefs().map(m => { const [a, b = a] = m.getAttribute("ref").split(":"); const p = splitRef(a), q = splitRef(b); return { c1: p.c, r1: p.r, c2: q.c, r2: q.r }; });
+  const mergeAt = (c, r) => merges().find(m => c >= m.c1 && c <= m.c2 && r >= m.r1 && r <= m.r2);
+
+  // 사람 한 명 칸 묶음: '성명' 글자가 있는 줄부터 다음 '성명' 줄 전까지
+  const starts = []; sh.each((c, r) => { if (K(sh.text(c, r)) === "성명" && !starts.some(s => s.r === r)) starts.push({ r, c }); });
+  starts.sort((a, b) => a.r - b.r);
+  if (!starts.length) { notes.push("⚠ 신분증·이수증·통장사본: '성명' 칸을 찾지 못해 양식 그대로 둡니다."); return; }
+  const span = starts.length > 1 ? starts[1].r - starts[0].r : 3;
+  let maxRow = Math.max(...sh.rows.keys());
+  const tailFree = maxRow <= starts.at(-1).r + span - 1;   // 묶음 아래에 다른 내용이 없으면 늘리거나 줄일 수 있음
+
+  // 사람이 양식 묶음보다 많으면 마지막 묶음을 복사해 늘림
+  let added = 0;
+  if (D.ids.length > starts.length && tailFree) {
+    const last = starts.at(-1).r, ms = merges().filter(m => m.r1 >= last && m.r2 < last + span);
+    while (starts.length < D.ids.length) {
+      const base = starts.at(-1).r + span;
+      for (let k = 0; k < span; k++) {
+        const src = sh.rows.get(last + k); if (!src) continue;
+        const el = src.el.cloneNode(true); el.setAttribute("r", base + k);
+        const cells = new Map();
+        for (const c of el.getElementsByTagNameNS(NS, "c")) { const p = splitRef(c.getAttribute("r")); c.setAttribute("r", A(p.c, base + k)); cells.set(p.c, c); }
+        sh.sd.append(el); sh.rows.set(base + k, { el, cells });
+      }
+      sh.setMerges(() => false, ms.map(m => `${A(m.c1, m.r1 - last + base)}:${A(m.c2, m.r2 - last + base)}`));
+      starts.push({ r: base, c: starts.at(-1).c }); added++;
+    }
+    sh.dirty = true;
+  }
+
+  // 칸 찾기: 이름표 오른쪽(병합이면 병합 끝 다음) 칸이 값 칸
+  const valueCell = (r0, re) => {
+    for (let r = r0; r < r0 + span; r++) {
+      const row = sh.rows.get(r); if (!row) continue;
+      for (const c of [...row.cells.keys()].sort((a, b) => a - b)) if (re.test(K(sh.text(c, r)))) { const m = mergeAt(c, r); return { c: (m ? m.c2 : c) + 1, r }; }
+    }
+    return null;
+  };
+  const FIELDS = [["name", /^(성명|이름)$/], ["rrn", /^주민(등록)?번호$/], ["site", /^현장명?$/], ["address", /^주소$/], ["phone", /^(전화|연락처|휴대폰|핸드폰)(번호)?$/]];
+  const b0 = Object.fromEntries(FIELDS.map(([k, re]) => [k, valueCell(starts[0].r, re)]));
+  const siteText = b0.site ? sh.text(b0.site.c, b0.site.r) : "";
+  const site = siteText || D.site || "";
+
+  // 사진 칸: 묶음 안에서 가장 높은 줄, 그 줄의 병합 칸들(왼쪽부터 신분증 · 이수증 · 통장사본)
+  const geo = await sheetGeom(book, sh);
+  const areasOf = r0 => {
+    let pr = r0, best = -1;
+    for (let r = r0; r < r0 + span; r++) { const h = geo.rowEmu(r); if (h > best) { best = h; pr = r; } }
+    let list = merges().filter(m => m.r1 <= pr && m.r2 >= pr && m.r1 >= r0 && m.r2 < r0 + span).sort((a, b) => a.c1 - b.c1);
+    if (list.length < 3) {   // 병합이 없으면 이름표 줄 기준으로 나눔
+      const nm = valueCell(r0, /^(성명|이름)$/), ph = valueCell(r0, /^(전화|연락처|휴대폰|핸드폰)(번호)?$/), rr = valueCell(r0, /^주민(등록)?번호$/), st = valueCell(r0, /^현장명?$/);
+      const c0 = (nm?.c || 3) - 1, cR = (rr?.c || 6), cS = (st?.c || 10) - 1, cE = Math.max(ph?.c || 10, st?.c || 10);
+      list = [{ c1: c0, c2: cR - 1, r1: pr, r2: pr }, { c1: cR, c2: cS - 1, r1: pr, r2: pr }, { c1: cS, c2: cE, r1: pr, r2: pr }];
+    }
+    return list.slice(0, 3);
+  };
+
+  // 글자 채우기
+  starts.forEach((s, i) => {
+    const p = D.ids[i];
+    for (const [k, re] of FIELDS) {
+      const at = valueCell(s.r, re); if (!at) continue;
+      const v = !p ? null : k === "site" ? site : (p[k] || null);
+      sh.set(at.c, at.r, v, sh.cell(at.c, at.r));
+    }
+  });
+
+  // 남는 묶음은 지움 (아래에 다른 내용이 없을 때만)
+  let removed = 0;
+  if (starts.length > D.ids.length && tailFree) {
+    const cut = starts[D.ids.length].r;
+    for (const r of [...sh.rows.keys()].filter(r => r >= cut)) { sh.rows.get(r).el.remove(); sh.rows.delete(r); }
+    sh.setMerges(ref => { const q = ref.split(":"); return q.some(x => splitRef(x).r >= cut); }, []);
+    removed = starts.length - D.ids.length;
+    starts.length = D.ids.length;
+    // 인쇄 영역도 맞춤
+    const sheetIdx = book.list.findIndex(s => s.name === name);
+    for (const dn of book.wb.getElementsByTagNameNS(NS, "definedName")) {
+      if (dn.getAttribute("name") === "_xlnm.Print_Area" && +dn.getAttribute("localSheetId") === sheetIdx)
+        dn.textContent = dn.textContent.replace(/(\$?[A-Z]+\$?)(\d+)$/, (m, c, r) => +r >= cut ? c + (cut - 1) : m);
+    }
+    sh.dirty = true;
+  }
+  maxRow = Math.max(...sh.rows.keys());
+  const dim = sh.doc.getElementsByTagNameNS(NS, "dimension")[0];
+  if (dim) dim.setAttribute("ref", dim.getAttribute("ref").replace(/(\d+)$/, maxRow));
+
+  /* ---- 그림 ---- */
+  const zip = book.zip;
+  const sRelP = relsPath(sh.path);
+  let sRels = zip.has(sRelP) ? parseX(await zip.text(sRelP)) : null;
+  let dEl = sh.doc.getElementsByTagNameNS(NS, "drawing")[0], drawPath = null;
+  if (dEl && sRels) {
+    const id = dEl.getAttributeNS(R_NS, "id");
+    const rel = [...sRels.getElementsByTagNameNS(PKG_NS, "Relationship")].find(x => x.getAttribute("Id") === id);
+    if (rel) drawPath = resolve(sh.path, rel.getAttribute("Target"));
+  }
+  const ct = parseX(await zip.text("[Content_Types].xml"));
+  const CT_NS = ct.documentElement.namespaceURI;
+  if (!drawPath) {   // 그림판이 없는 양식이면 새로 만듦
+    let n = 1; while (zip.has(`xl/drawings/drawing${n}.xml`)) n++;
+    drawPath = `xl/drawings/drawing${n}.xml`;
+    zip.add(drawPath, `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n<xdr:wsDr xmlns:xdr="${XDR_NS}" xmlns:a="${A_NS}"></xdr:wsDr>`);
+    const o = ct.createElementNS(CT_NS, "Override"); o.setAttribute("PartName", "/" + drawPath); o.setAttribute("ContentType", "application/vnd.openxmlformats-officedocument.drawing+xml"); ct.documentElement.append(o);
+    if (!sRels) { sRels = parseX(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="${PKG_NS}"></Relationships>`); zip.add(sRelP, ""); }
+    const ids = [...sRels.getElementsByTagNameNS(PKG_NS, "Relationship")].map(x => x.getAttribute("Id"));
+    let k = 1; while (ids.includes("rId" + k)) k++;
+    const rel = sRels.createElementNS(PKG_NS, "Relationship"); rel.setAttribute("Id", "rId" + k); rel.setAttribute("Type", T_DRAWING); rel.setAttribute("Target", relTo(sh.path, drawPath)); sRels.documentElement.append(rel);
+    zip.put(sRelP, serX(sRels));
+    dEl = sh.doc.createElementNS(NS, "drawing"); dEl.setAttributeNS(R_NS, "r:id", "rId" + k);
+    const after = ["legacyDrawing", "legacyDrawingHF", "drawingHF", "picture", "oleObjects", "controls", "webPublishItems", "tableParts", "extLst"].map(t => sh.doc.getElementsByTagNameNS(NS, t)[0]).find(Boolean);
+    sh.doc.documentElement.insertBefore(dEl, after || null); sh.dirty = true;
+  }
+  const dRelP = relsPath(drawPath);
+  const dDoc = parseX(await zip.text(drawPath));
+  const dRels = zip.has(dRelP) ? parseX(await zip.text(dRelP)) : parseX(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="${PKG_NS}"></Relationships>`);
+  if (!zip.has(dRelP)) zip.add(dRelP, "");
+
+  // 예전 사람 사진(그림 개체)은 모두 빼고, 다른 곳에서 안 쓰는 그림 파일은 지움
+  const root = dDoc.documentElement;
+  const anchors = [...root.childNodes].filter(n => n.nodeType === 1 && /Anchor$/.test(n.localName));
+  let oldPics = 0;
+  for (const an of anchors) if (an.getElementsByTagNameNS(XDR_NS, "pic").length) { an.remove(); oldPics++; }
+  const usedIds = new Set([...dDoc.getElementsByTagNameNS("*", "*")].flatMap(e => [...e.attributes].filter(a => a.namespaceURI === R_NS).map(a => a.value)));
+  const gone = [];
+  for (const rel of [...dRels.getElementsByTagNameNS(PKG_NS, "Relationship")]) if (rel.getAttribute("Type") === T_IMAGE && !usedIds.has(rel.getAttribute("Id"))) { gone.push(resolve(drawPath, rel.getAttribute("Target"))); rel.remove(); }
+  if (gone.length) {
+    const still = new Set();
+    for (const e of zip.entries) if (/\.rels$/.test(e.name) && e.name !== dRelP) {
+      const d = parseX(await zip.text(e.name)); const owner = e.name.replace(/_rels\/([^/]+)\.rels$/, "$1");
+      for (const r of d.getElementsByTagNameNS(PKG_NS, "Relationship")) if (r.getAttribute("TargetMode") !== "External") still.add(resolve(owner, r.getAttribute("Target")));
+    }
+    for (const g of new Set(gone)) if (!still.has(g)) zip.remove(g);
+  }
+
+  // 새 사진 넣기: 칸 안에 비율 그대로, 가운데 맞춤
+  if (![...ct.getElementsByTagNameNS(CT_NS, "Default")].some(d => d.getAttribute("Extension").toLowerCase() === "jpeg")) {
+    const d = ct.createElementNS(CT_NS, "Default"); d.setAttribute("Extension", "jpeg"); d.setAttribute("ContentType", "image/jpeg"); ct.documentElement.insertBefore(d, ct.documentElement.firstChild);
+  }
+  const relIds = new Set([...dRels.getElementsByTagNameNS(PKG_NS, "Relationship")].map(x => x.getAttribute("Id")));
+  let rk = 1, mk = 1, pid = 1 + Math.max(0, ...[...dDoc.getElementsByTagNameNS(XDR_NS, "cNvPr")].map(e => +e.getAttribute("id") || 0));
+  const SLOT = ["신분증", "이수증", "통장사본"];
+  let pics = 0; const noPhoto = [];
+  const frag = [];
+  starts.forEach((s, i) => {
+    const p = D.ids[i]; if (!p) return;
+    const areas = areasOf(s.r);
+    const miss = [];
+    SLOT.forEach((slot, j) => {
+      const img = p.images?.[slot], ar = areas[j];
+      if (!img || !ar) { miss.push(slot); return; }
+      while (zip.has(`xl/media/jyid${mk}.jpeg`)) mk++;
+      const media = `xl/media/jyid${mk++}.jpeg`;
+      zip.add(media, img.bytes);
+      while (relIds.has("rId" + rk)) rk++;
+      const rid = "rId" + rk; relIds.add(rid);
+      const rel = dRels.createElementNS(PKG_NS, "Relationship"); rel.setAttribute("Id", rid); rel.setAttribute("Type", T_IMAGE); rel.setAttribute("Target", relTo(drawPath, media)); dRels.documentElement.append(rel);
+      // 칸 크기
+      let aw = 0, ah = 0; for (let c = ar.c1; c <= ar.c2; c++) aw += geo.colEmu(c); for (let r = ar.r1; r <= ar.r2; r++) ah += geo.rowEmu(r);
+      const pad = 6 * 9525, bw = Math.max(1, aw - 2 * pad), bh = Math.max(1, ah - 2 * pad);
+      const k = Math.min(bw / img.w, bh / img.h), cx = Math.round(img.w * k), cy = Math.round(img.h * k);
+      const x0 = Math.round((aw - cx) / 2), y0 = Math.round((ah - cy) / 2);
+      const f = { c: geo.walk(ar.c1, x0, geo.colEmu), r: geo.walk(ar.r1, y0, geo.rowEmu) };
+      const t = { c: geo.walk(ar.c1, x0 + cx, geo.colEmu), r: geo.walk(ar.r1, y0 + cy, geo.rowEmu) };
+      const nm = xmlEsc(`${slot} ${p.name || ""}`.trim());
+      frag.push(`<xdr:twoCellAnchor xmlns:xdr="${XDR_NS}" xmlns:a="${A_NS}" xmlns:r="${R_NS}" editAs="oneCell">` +
+        `<xdr:from><xdr:col>${f.c.i - 1}</xdr:col><xdr:colOff>${f.c.off}</xdr:colOff><xdr:row>${f.r.i - 1}</xdr:row><xdr:rowOff>${f.r.off}</xdr:rowOff></xdr:from>` +
+        `<xdr:to><xdr:col>${t.c.i - 1}</xdr:col><xdr:colOff>${t.c.off}</xdr:colOff><xdr:row>${t.r.i - 1}</xdr:row><xdr:rowOff>${t.r.off}</xdr:rowOff></xdr:to>` +
+        `<xdr:pic><xdr:nvPicPr><xdr:cNvPr id="${pid++}" name="${nm}" descr="${nm}"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr>` +
+        `<xdr:blipFill><a:blip r:embed="${rid}"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill>` +
+        `<xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/></xdr:twoCellAnchor>`);
+      pics++;
+    });
+    if (miss.length) noPhoto.push(`${p.name}(${miss.join("·")})`);
+  });
+  for (const s of frag) root.append(dDoc.importNode(parseX(s).documentElement, true));
+  zip.put(drawPath, serX(dDoc));
+  zip.put(dRelP, serX(dRels));
+  zip.put("[Content_Types].xml", serX(ct));
+
+  notes.push(`신분증·이수증·통장사본: ${D.ids.length}명 인적사항 + 사진 ${pics}장 넣음` + (added ? ` (양식 칸이 모자라 ${added}명분 늘림)` : "") + (removed ? ` (남는 ${removed}칸 지움)` : "") + (oldPics ? `, 양식에 있던 예전 사진 ${oldPics}장 뺌` : ""));
+  if (D.ids.length > starts.length) notes.push(`⚠ 신분증·이수증·통장사본: 양식 칸이 ${starts.length}명분이라 ${D.ids.length - starts.length}명은 넣지 못했습니다.`);
+  if (noPhoto.length) notes.push(`사진이 없어 빈칸으로 둔 사람 ${noPhoto.length}명: ${noPhoto.slice(0, 12).join(", ")}${noPhoto.length > 12 ? ` 외 ${noPhoto.length - 12}명` : ""}`);
+  if (D.idSkipped?.length) notes.push(`⚠ 사진으로 넣지 못한 파일: ${D.idSkipped.join(", ")}`);
+}
+
 /* ================= 공개 함수 ================= */
 // D = { ym, title, site, mealPrice, exec:[{cat,vendor,supply,vat,note}], labor:[{team,name,rate,d,ded,memo}], meal:[{name,team,jo,jung,memo}], mat:[…], workerOf(p) }
 export async function fillTemplate(file, D) {
@@ -584,6 +810,7 @@ export async function fillTemplate(file, D) {
   await fillMeal(book, D, notes);
   await fillExec(book, D, notes, L);
   await fillMat(book, D, notes);
+  await fillIds(book, D, notes);
   // 수식 결과 다시 계산 (수식이 있는 모든 시트)
   const calc = new Calc(book); let fail = 0;
   for (const s of book.list) {
@@ -591,7 +818,7 @@ export async function fillTemplate(file, D) {
     if (has) fail += await calc.writeBack(sh);
   }
   if (fail) notes.push(`수식 ${fail}칸은 엑셀이 파일을 열 때 계산합니다.`);
-  notes.push("그림이 들어가는 시트(신분증·이수증·통장사본, 자재 사진대지, 거래명세표·장비·주유 등)는 고른 양식 파일 그대로입니다.");
+  notes.push(D.ids ? "자재 사진대지, 거래명세표·장비·주유 등 나머지 시트는 고른 양식 파일 그대로입니다." : "그림이 들어가는 시트(신분증·이수증·통장사본, 자재 사진대지, 거래명세표·장비·주유 등)는 고른 양식 파일 그대로입니다.");
   return { blob: await book.save(), notes, sheets: book.names };
 }
 export { shiftFormula as _shiftFormula, openBook, Calc, Sheet, readZip, writeZip, colNum, colName, splitRef, NS };

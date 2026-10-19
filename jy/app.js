@@ -672,7 +672,7 @@ async function exportDialog() {
     dlg.innerHTML = `<form method="dialog">
       <h3>엑셀 양식으로 저장 <small class="muted">· ${esc(S.month.title)}</small></h3>
       <p class="hint" style="margin:-8px 0 12px">고른 엑셀 양식 파일에서 <b>값이 들어가는 칸만</b> 이 달 내용으로 바꿉니다. 서식·병합·인쇄 설정·그림·수식은 그대로 둡니다.
-        (실행내역서 · 식대 · 인건비 · 노무비명세서 · 자재구입)</p>
+        (실행내역서 · 식대 · 인건비 · 노무비명세서 · 자재구입 · 신분증·이수증·통장사본 — 인적사항과 올린 사진이 사람별 칸에 들어갑니다)</p>
       <div class="imp-file">
         <div class="imp-h"><b>양식 파일</b>
           ${tpl ? `<span>${esc(tpl.name)} <small class="muted">${picked ? "(방금 고름)" : `(지난번 사용 · ${esc(new Date(saved.date).toLocaleDateString("ko-KR"))})`} · ${(tpl.blob.size / 1048576).toFixed(1)}MB</small></span>` : '<span class="muted">아직 고른 양식이 없습니다</span>'}
@@ -698,6 +698,7 @@ async function exportDialog() {
         mat: sorted("mat").map(r => r.data),
         workerOf: p => workerOf({ data: p }),
       };
+      Object.assign(D, await idImages(t => { $("#x-go", dlg).textContent = t; }));
       const out = await fillTemplate(tpl.blob, D);
       const a = document.createElement("a"); a.href = URL.createObjectURL(out.blob); a.download = outName; a.hidden = true; dlg.append(a); a.click();   // 모달 창 바깥 요소는 비활성이라 창 안에 붙여서 누름
       setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 60000);
@@ -707,6 +708,54 @@ async function exportDialog() {
     busy = false; draw();
   };
   draw(); dlg.showModal();
+}
+
+// 엑셀 '신분증,이수증,통장사본' 시트용: 이번 달 명단 순서대로 인적사항 + 칸마다 첫 사진 (JPEG로 다시 저장)
+async function idImages(progress) {
+  const people = monthWorkers();
+  const files = S.files.filter(f => f.sheet === "id" && people.some(w => w.id === f.worker_id));
+  await signUrls(files.map(f => f.path));
+  const skipped = [];
+  const toJpeg = async f => {
+    const url = S.urls[f.path]; if (!url) throw new Error("주소 없음");
+    const res = await fetch(url); if (!res.ok) throw new Error("내려받기 실패 " + res.status);
+    const blob = await res.blob();
+    let src;
+    if (isPdf(f) || blob.type === "application/pdf") src = await pdfFirstPage(await blob.arrayBuffer());
+    else src = await createImageBitmap(blob, { imageOrientation: "from-image" });
+    const max = 1600, k = Math.min(1, max / Math.max(src.width, src.height));
+    const c = document.createElement("canvas"); c.width = Math.max(1, Math.round(src.width * k)); c.height = Math.max(1, Math.round(src.height * k));
+    const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height); g.drawImage(src, 0, 0, c.width, c.height);
+    const jb = await new Promise(r => c.toBlob(r, "image/jpeg", 0.85));
+    return { bytes: new Uint8Array(await jb.arrayBuffer()), w: c.width, h: c.height };
+  };
+  const jobs = [];
+  const ids = people.map(w => {
+    const p = { name: w.name, rrn: w.rrn || "", address: w.address || "", phone: w.phone || "", images: {} };
+    for (const g of ID_SLOTS) {
+      const f = files.filter(x => x.worker_id === w.id && x.grp === g).sort((a, b) => a.sort - b.sort)[0];
+      if (f) jobs.push({ p, g, f });
+    }
+    return p;
+  });
+  let done = 0, i = 0;
+  const run = async () => { while (i < jobs.length) { const j = jobs[i++]; try { j.p.images[j.g] = await toJpeg(j.f); } catch (e) { console.warn(e); skipped.push(`${j.p.name} ${j.g}`); } progress?.(`사진 준비 중… ${++done}/${jobs.length}`); } };
+  await Promise.all(Array.from({ length: 6 }, run));
+  progress?.("엑셀 만드는 중…");
+  return { ids, idSkipped: skipped };
+}
+let _pdfjs = null;
+async function pdfFirstPage(buf) {
+  if (!_pdfjs) {
+    _pdfjs = await import("https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/legacy/build/pdf.min.mjs");
+    _pdfjs.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/legacy/build/pdf.worker.min.mjs";
+  }
+  const doc = await _pdfjs.getDocument({ data: new Uint8Array(buf) }).promise;
+  const pg = await doc.getPage(1), vp = pg.getViewport({ scale: 2 });
+  const c = document.createElement("canvas"); c.width = vp.width; c.height = vp.height;
+  await pg.render({ canvasContext: c.getContext("2d"), viewport: vp }).promise;
+  doc.destroy();
+  return c;
 }
 
 /* ================= 식대 ================= */
