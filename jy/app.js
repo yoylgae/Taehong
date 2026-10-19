@@ -812,7 +812,7 @@ async function rContract() {
           <label>계약기간 <span><input type="date" id="ct-start" value="${esc(c.start)}"> ~ <input type="date" id="ct-end" value="${esc(c.end)}"></span></label>
           <label>임금 지급일 <span>매월 <input id="ct-pay" value="${esc(c.payday ?? "")}" style="width:56px" placeholder="15"> 일 <small class="muted">(비우면 양식 그대로)</small></span></label>
         </div>
-        <p class="hint">일당은 인건비 탭의 단가, 성명·주민번호·주소·전화·통장은 신분증·이수증·통장사본 탭의 인적사항이 들어갑니다. 통장은 양식에 계좌 칸이 채워져 있던 경우에만 넣습니다.</p>
+        <p class="hint">일당은 인건비 탭의 단가, 성명·주민번호·주소·전화·통장은 신분증·이수증·통장사본 탭의 인적사항이 들어갑니다. 통장구좌는 <b>직영·하태계·비계를 뺀 모든 사람은 '드림인력'</b>으로 적고, 그 외에는 양식에 계좌 칸이 채워져 있던 경우에만 본인 계좌를 넣습니다.</p>
       </div>
       <div class="card ct-card"><h4>소속별 양식</h4>
         <table class="t imp-t ct-teams"><thead><tr><th>소속</th><th>양식</th><th>근로장소</th><th>공종/수행업무</th><th>소속팀장</th><th>직종</th></tr></thead><tbody>
@@ -876,7 +876,9 @@ async function rContract() {
           const w = workerOf(r) || {}; if (!w.rrn) miss.push(r.data.name);
           const st = c.teams[(r.data.team || "").trim() || "(소속 없음)"] || {};
           const o = {}; for (const k of ["place", "work", "leader", "job"]) if (st[k]) o[k] = st[k];
-          return { name: r.data.name.trim(), rrn: w.rrn || "", address: w.address || "", phone: w.phone || "", bank: w.bank || "", rate: Number(r.data.rate) || 0, o };
+          // 통장구좌: 직영 구분·하태계·비계 소속을 뺀 모든 사람은 '드림인력'으로 기재
+          const bankLabel = (r.data.group || "").trim() === "직영" || r.data.name.trim() === "하태계" || (r.data.team || "").trim() === "비계" ? "" : "드림인력";
+          return { name: r.data.name.trim(), rrn: w.rrn || "", address: w.address || "", phone: w.phone || "", bank: w.bank || "", bankLabel, rate: Number(r.data.rate) || 0, o };
         });
         const out = await buildContracts(ctCache[fid].blob, sheetName, people, { start: c.start, end: c.end, months, payday: c.payday || "" });
         const { m } = ymParts(S.month.ym);

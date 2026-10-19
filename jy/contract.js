@@ -93,7 +93,11 @@ function fillOne(sh, P, O) {
   if (f.payDay && O.payday) sh.editText(f.payDay.c, f.payDay.r, e => e.replace(/매월\s*\d*\s*일에/, () => `매월  ${O.payday}  일에`));
   // 통장: 양식에 견본 계좌가 적혀 있을 때만 채움
   const bk = String(P.bank || "").trim(), bm = bk.match(/^(\S+?)(?:은행)?\s+([\d-]+.*)$/), bankName = bm ? bm[1] : "", acct = bm ? bm[2].trim() : bk;
-  if (f.bankSep) {
+  // 통장구좌 문구 지정(예: '드림인력'): 계좌 자리에 그 글자를 넣고 은행 자리는 비움
+  if (P.bankLabel && f.bankSep) {
+    const a = f.right(f.bankSep), b = a && f.right(a);
+    if (a) { replaceAll(a, P.bankLabel); mark(a); if (b && get(b)) { replaceAll(b, null); mark(b); } }
+  } else if (f.bankSep) {
     const a = f.right(f.bankSep), b = a && f.right(a);
     if (a && get(a)) { replaceAll(a, acct); mark(a); if (b && get(b)) { replaceAll(b, bankName); mark(b); } }
   }
@@ -115,7 +119,8 @@ function fillOne(sh, P, O) {
       if (sample.tel) e.replace(lit(sample.tel), () => P.phone || "");
       // 빈 서명란: '성명 :          (인)' → 이름은 빈칸(공백) 자리에 넣어 '(인)' 서식은 그대로
       if (!sample.name && P.name) e.replace(/((?:성\s*명|동의|확인자|수령자\s*성명)\s*:?)(\s{3,})(?=\(인\))/g, (m, a) => `${a}     ${spaced(P.name)}     `);
-      if (f.bankInline && bk && /통장구좌\(\s*[^\s,][^,]*,/.test(t)) e.replace(/통장구좌\([^,]*,[^)]*은행\)/, () => `통장구좌(  ${acct}  ,  ${bankName}  은행)`);
+      if (f.bankInline && P.bankLabel && /통장구좌\(/.test(t)) e.replace(/(통장구좌\()([^,]*)(,)/, (m, a, mid, cm) => { const w = Math.max(4, mid.length - P.bankLabel.length * 2); const l = Math.floor(w / 2); return `${a}${" ".repeat(l)}${P.bankLabel}${" ".repeat(w - l)}${cm}`; });
+      else if (f.bankInline && bk && /통장구좌\(\s*[^\s,][^,]*,/.test(t)) e.replace(/통장구좌\([^,]*,[^)]*은행\)/, () => `통장구좌(  ${acct}  ,  ${bankName}  은행)`);
       // '주  소 : ' 처럼 값이 비어 있는 칸 (오른쪽 칸이 비어 있을 때만)
       if (nxEmpty && /:\s*$/.test(t)) {
         const L = K(t.replace(/:\s*$/, ""));
