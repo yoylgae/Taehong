@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>현장 지적도</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app" id="app">
+  <!-- 위쪽 막대 -->
+  <header class="bar">
+    <div class="seg" id="mode">
+      <button type="button" data-mode="view" class="on">📍 장비·작업 배치</button>
+      <button type="button" data-mode="edit">✏️ 도면 편집</button>
+    </div>
+    <div class="date">
+      <button type="button" class="ib" id="d-prev" title="전날">‹</button>
+      <input type="date" id="d-day">
+      <button type="button" class="ib" id="d-next" title="다음날">›</button>
+      <button type="button" class="chipbtn" id="d-today">오늘</button>
+      <label class="chk"><input type="checkbox" id="d-all"> 전체 기간</label>
+    </div>
+    <div class="find">
+      <input id="q" placeholder="지번·글자 찾기 (예: 686-3)" autocomplete="off">
+      <div class="find-list" id="q-list" hidden></div>
+    </div>
+    <span class="grow"></span>
+    <div class="seg small" id="bubble-mode" title="말풍선 표시">
+      <button type="button" data-b="full" class="on">말풍선</button>
+      <button type="button" data-b="short">간단히</button>
+      <button type="button" data-b="off">끄기</button>
+    </div>
+    <button type="button" class="ib" id="fit" title="전체 보기 (도면 전체를 화면에 맞춤)">⤢</button>
+    <button type="button" class="ib" id="shot" title="지금 화면을 그림(PNG)으로 저장">🖼</button>
+    <a class="ib" id="popout" href="./" target="_blank" title="새 창으로 크게 보기">↗</a>
+  </header>
+
+  <!-- 장비 아이콘 모음 (배치 모드) -->
+  <section class="palette" id="palette">
+    <p class="pal-hint"><b>아이콘을 지도 위에 끌어다 놓으세요</b> · 누른 뒤 지도를 눌러도 됩니다 · 놓은 아이콘은 끌어서 옮기고, 누르면 내용을 고칩니다</p>
+    <div class="pal" id="pal"></div>
+  </section>
+
+  <!-- 캐드 도구 (편집 모드) -->
+  <section class="tools" id="tools" hidden>
+    <div class="tg">
+      <button type="button" data-cmd="SEL" class="on" title="선택 (Esc)">⬚<span>선택</span></button>
+      <button type="button" data-cmd="L" title="선 (L)">╱<span>선</span></button>
+      <button type="button" data-cmd="PL" title="폴리선 (PL)">⌇<span>폴리선</span></button>
+      <button type="button" data-cmd="REC" title="사각형 (REC)">▭<span>사각형</span></button>
+      <button type="button" data-cmd="C" title="원 (C)">◯<span>원</span></button>
+      <button type="button" data-cmd="H" title="영역 칠하기 · 면적 (H)">▰<span>영역</span></button>
+      <button type="button" data-cmd="T" title="글자 (T)">A<span>글자</span></button>
+      <button type="button" data-cmd="DIM" title="치수 (DIM)">↔<span>치수</span></button>
+      <button type="button" data-cmd="DI" title="거리 재기 (DI)">📏<span>거리</span></button>
+    </div>
+    <div class="tg">
+      <button type="button" data-cmd="M" title="이동 (M) — 고른 객체를 끌어도 됩니다">✥<span>이동</span></button>
+      <button type="button" data-cmd="CO" title="복사 (CO) — Ctrl 누른 채 끌어도 됩니다">⧉<span>복사</span></button>
+      <button type="button" data-cmd="RO" title="회전 (RO)">⟳<span>회전</span></button>
+      <button type="button" data-cmd="E" title="삭제 (Delete)">🗑<span>삭제</span></button>
+    </div>
+    <div class="tg">
+      <button type="button" id="undo" title="실행취소 (Ctrl+Z)">↶<span>취소</span></button>
+      <button type="button" id="redo" title="다시 실행 (Ctrl+Y)">↷<span>다시</span></button>
+    </div>
+    <div class="tg cur">
+      <label title="새로 그릴 객체의 레이어">레이어 <select id="cur-layer"></select></label>
+      <label title="새로 그릴 객체의 선 색 (비우면 레이어 색)">색 <input type="color" id="cur-color" value="#e11d48"><button type="button" class="mini" id="cur-bylayer" title="레이어 색 따르기">레이어색</button></label>
+      <label title="선 굵기">굵기 <select id="cur-w"><option value="1">가늘게</option><option value="2" selected>보통</option><option value="4">굵게</option><option value="8">아주 굵게</option></select></label>
+      <label title="영역 칠하기 색">채움 <input type="color" id="cur-fill" value="#3b82f6"></label>
+    </div>
+    <span class="grow"></span>
+    <div class="tg">
+      <span class="dirty" id="dirty"></span>
+      <button type="button" id="revert" class="ghost" title="저장한 상태로 다시 불러오기">되돌리기</button>
+      <button type="button" id="save" class="primary" title="도면 수정 내용 저장 (Ctrl+S)">💾 저장</button>
+    </div>
+  </section>
+
+  <div class="body">
+    <div class="stage" id="stage">
+      <canvas id="cv"></canvas>
+      <svg class="leaders" id="leaders"></svg>
+      <div class="marks" id="marks"></div>
+      <div class="place-hint" id="place-hint" hidden></div>
+      <div class="zoom">
+        <button type="button" class="ib" id="z-in" title="확대">＋</button>
+        <button type="button" class="ib" id="z-out" title="축소">－</button>
+      </div>
+      <div class="loading" id="loading"><span class="spin"></span> 지적도 불러오는 중…</div>
+    </div>
+
+    <!-- 오른쪽 패널 -->
+    <aside class="side" id="side">
+      <div class="side-h">
+        <div class="tabs" id="side-tabs">
+          <button type="button" data-tab="list" class="on">작업 현황</button>
+          <button type="button" data-tab="layers">레이어</button>
+          <button type="button" data-tab="props">속성</button>
+        </div>
+        <button type="button" class="ib sm" id="side-tg" title="패널 접기">⟩</button>
+      </div>
+      <div class="side-b" id="tab-list"></div>
+      <div class="side-b" id="tab-layers" hidden></div>
+      <div class="side-b" id="tab-props" hidden></div>
+    </aside>
+  </div>
+
+  <!-- 명령줄 (편집 모드) -->
+  <footer class="cmd" id="cmd" hidden>
+    <div class="cmd-log" id="cmd-log"></div>
+    <div class="cmd-row">
+      <span class="cmd-p" id="cmd-p">명령:</span>
+      <input id="cmd-in" autocomplete="off" spellcheck="false" placeholder="L 선 · PL 폴리선 · REC 사각형 · C 원 · H 영역 · T 글자 · DIM 치수 · DI 거리 · M 이동 · CO 복사 · RO 회전 · E 삭제 · CAL 축척">
+      <span class="st" id="st-xy">0, 0</span>
+      <button type="button" class="st tg-btn" id="st-snap" title="객체 스냅 (F3)">스냅</button>
+      <button type="button" class="st tg-btn" id="st-ortho" title="직교 (F8, 또는 Shift 누른 채)">직교</button>
+      <button type="button" class="st tg-btn" id="st-scale" title="축척 맞추기 (CAL)">축척 없음</button>
+    </div>
+  </footer>
+</div>
+
+<!-- 장비·작업 입력 -->
+<dialog id="dlg-mark">
+  <form method="dialog" id="f-mark" autocomplete="off">
+    <h3><span class="mk-ic" id="m-ic"></span><span id="m-title">장비·작업</span></h3>
+    <div class="kinds" id="m-kinds"></div>
+    <div class="fg">
+      <label><span>장비명·호기</span><input name="name" placeholder="예: 0.6W 1호기, 25톤"></label>
+      <label><span>업체</span><input name="company" placeholder="예: 대두이앤지"></label>
+      <label class="wide"><span>작업 내용</span><input name="work" placeholder="예: 터파기 및 토사 상차" required></label>
+      <label><span>담당자</span><input name="manager"></label>
+      <label><span>연락처</span><input name="phone" inputmode="tel"></label>
+      <label><span>작업 시작</span><input type="date" name="date_from"></label>
+      <label><span>작업 끝</span><input type="date" name="date_to"></label>
+      <label class="wide"><span>작업계획서</span><select name="plan_id"><option value="">연결 안 함</option></select></label>
+      <label class="wide"><span>메모</span><textarea name="memo" rows="2" placeholder="신호수 배치, 통제 구간 등"></textarea></label>
+    </div>
+    <div class="dlg-btns">
+      <button type="button" class="btn danger" id="m-del">삭제</button>
+      <span class="grow"></span>
+      <button value="cancel" formnovalidate class="btn">취소</button>
+      <button value="save" class="btn primary">저장</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- 마커 상세 -->
+<div class="pop" id="pop" hidden></div>
+<div id="toast" hidden></div>
+<script type="module" src="app.js"></script>
+</body>
+</html>

@@ -14,6 +14,7 @@ const store = { get(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? 
    newWindow: true 를 붙이면 탭 대신 새 창으로 열림                                    */
 const MENUS = [
   { name: "공사관리", items: [
+    { id: "map", name: "현장 지적도", icon: "🗺", url: "map/" },
     { id: "jy", name: "직영실행", icon: "📒", url: "jy/" },
     { id: "waste", name: "폐기물 반출 현황", icon: "🚛", url: "https://meko-gdenc.vercel.app/", newWindow: true },
   ] },
@@ -101,7 +102,7 @@ $("#btn-pop").onclick = () => { const u = ITEM[active]?.url; if (u) window.open(
 /* ================= 사이드바 접기 ================= */
 const setMini = on => { document.body.classList.toggle("mini", on); $("#side-tg .ic").textContent = on ? "⟩" : "⟨"; store.set("pms.mini", on); };
 $("#side-tg").onclick = () => setMini(!document.body.classList.contains("mini"));
-setMini(store.get("pms.mini", false));
+setMini(innerWidth < 700 ? true : store.get("pms.mini", false));
 
 /* ================= 현장 설정 ================= */
 let site = {};
@@ -179,6 +180,11 @@ document.addEventListener("click", e => {
   if (r) openTab("ewp", "#/edit/" + r.dataset.id);
 });
 $("#d-refresh").onclick = loadDash;
+// 지도(iframe)에서 다른 화면 열기 요청
+addEventListener("message", e => {
+  if (e.origin !== location.origin || e.data?.pms !== "open") return;
+  if (ITEM[e.data.id]) openTab(e.data.id, e.data.hash);
+});
 
 /* ================= 시작 ================= */
 await loadSite();

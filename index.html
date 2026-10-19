@@ -41,14 +41,17 @@
       <div class="dash">
         <div class="dash-head">
           <div><h1 id="d-hello">안녕하세요</h1><p class="sub" id="d-now"></p></div>
+          <div class="kmini">
+            <span class="km"><small>오늘 작업 장비</small><b id="k-today">0</b></span>
+            <span class="km accent"><small>결재 대기</small><b id="k-wait">0</b></span>
+            <span class="km"><small>이번 달 반입</small><b id="k-month">0</b></span>
+            <span class="km"><small>전체 계획서</small><b id="k-total">0</b></span>
+          </div>
           <a class="btn primary" href="#" data-open="ewp" data-hash="#/new">+ 작업계획서 작성</a>
         </div>
 
-        <div class="kpis">
-          <div class="kpi"><span class="k-label">전체 작업계획서</span><b class="k-val" id="k-total">0</b><span class="k-sub">건</span></div>
-          <div class="kpi accent"><span class="k-label">결재 대기</span><b class="k-val" id="k-wait">0</b><span class="k-sub">상신 상태</span></div>
-          <div class="kpi"><span class="k-label">금일 작업 장비</span><b class="k-val" id="k-today">0</b><span class="k-sub">대</span></div>
-          <div class="kpi"><span class="k-label">이번 달 반입</span><b class="k-val" id="k-month">0</b><span class="k-sub">대</span></div>
+        <div class="mapcard">
+          <iframe id="home-map" title="현장 지적도" src="map/"></iframe>
         </div>
 
         <div class="grid2">
