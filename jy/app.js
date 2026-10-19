@@ -496,6 +496,7 @@ function dcell(r, key, d, ym, cycle = "half") {
 
 document.addEventListener("click", e => {
     const td = e.target.closest("td[data-dc]"); if (!td) return;
+    if (S.sheet === "meal" && S.month.settings.mealAuto !== false) { toast("식대는 인건비 출역대로 자동입니다. 직접 고치려면 '인건비 출역대로 자동'을 끄세요."); return; }
     const r = findRow(td.dataset.dc); const key = td.dataset.key, d = td.dataset.day;
     const o = (r.data[key] ||= {}); const cur = o[d];
     const next = td.dataset.cycle === "half" ? (!cur ? 1 : cur == 1 ? 0.5 : null) : (cur ? null : 1);
@@ -619,6 +620,7 @@ const tplStore = {
 };
 async function exportDialog() {
   applyRates();
+  if (S.month.settings.mealAuto !== false) syncMeals();
   await flush();
   let dlg = $("#dlg-xlsx");
   if (!dlg) { dlg = document.createElement("dialog"); dlg.id = "dlg-xlsx"; dlg.className = "imp"; document.body.append(dlg); }
@@ -668,14 +670,53 @@ async function exportDialog() {
 }
 
 /* ================= 식대 ================= */
+// 식대 자동 맞춤: 인건비에서 출역한 날마다 조식·중식 1식씩 (비계·건하이엔지 인원은 식대 명단에서 제외)
+const mealExcluded = r => ["비계", "건하이엔지"].includes((r.data.group || "").trim()) || (r.data.team || "").trim() === "비계";
+function syncMeals() {
+  const st = S.month.settings;
+  if (!st.meal_price) { st.meal_price = 10000; mark("month"); }
+  const labor = sorted("labor").filter(r => (r.data.name || "").trim());
+  const want = new Map();   // 이름 → { team, days:Set }
+  const excludedNames = new Set();
+  labor.forEach(r => {
+    const nm = r.data.name.trim();
+    if (mealExcluded(r)) { excludedNames.add(nm); return; }
+    const w = want.get(nm) || { team: r.data.team || "", days: new Set(), order: want.size };
+    Object.entries(r.data.d || {}).forEach(([d, v]) => { if (Number(v) > 0) w.days.add(d); });
+    want.set(nm, w);
+  });
+  for (const [nm, w] of want) if (!w.days.size) want.delete(nm);   // 출역이 없는 사람은 넣지 않음
+  let changed = 0;
+  // 지울 줄: 자동으로 만든 줄 중 대상이 아니게 된 사람, 비계·건하이엔지 인원
+  for (const r of [...S.rows.meal]) {
+    const nm = (r.data.name || "").trim();
+    if ((r.data.auto && !want.has(nm)) || (excludedNames.has(nm) && !want.has(nm))) { delRow("meal", r.id); changed++; }
+  }
+  // 채울 줄
+  for (const [nm, w] of want) {
+    let r = S.rows.meal.find(x => (x.data.name || "").trim() === nm);
+    const jo = {}, jung = {}; [...w.days].forEach(d => { jo[d] = 1; jung[d] = 1; });
+    if (!r) { r = newRow("meal", { name: nm, team: w.team, jo, jung, memo: "", auto: true }); changed++; continue; }
+    if (JSON.stringify(r.data.jo || {}) !== JSON.stringify(jo) || JSON.stringify(r.data.jung || {}) !== JSON.stringify(jung) || !r.data.auto || (w.team && r.data.team !== w.team)) {
+      r.data.jo = jo; r.data.jung = jung; r.data.auto = true; if (w.team) r.data.team = w.team; mark("rows", r); changed++;
+    }
+  }
+  // 순서: 인건비 순서 → 그 밖에 직접 넣은 사람
+  const order = [...want.keys()];
+  const rank = r => { const i = order.indexOf((r.data.name || "").trim()); return i >= 0 ? i : 1e6 + r.sort; };
+  sorted("meal").sort((a, b) => rank(a) - rank(b)).forEach((r, k) => { if (r.sort !== k + 1) { r.sort = k + 1; mark("rows", r); } });
+  return changed;
+}
 function rMeal() {
-  const ym = S.month.ym, rows = sorted("meal"), n = nDays(ym, rows, ["jo", "jung"]), st = S.month.settings;
+  const st0 = S.month.settings;
+  if (st0.mealAuto !== false) syncMeals();
+  const ym = S.month.ym, rows = sorted("meal"), n = nDays(ym, rows, ["jo", "jung"]), st = S.month.settings, auto = st.mealAuto !== false;
   $("#sheet").innerHTML = `
     <div class="bar">
       <button class="btn primary" id="m-add">+ 인원 추가</button>
-      <button class="btn" id="m-from" title="인건비 명단에 있는데 식대 명단에 없는 사람을 추가합니다">인건비 명단 불러오기</button>
+      <label title="켜 두면 인건비 출역일에 맞춰 조식·중식이 자동으로 체크됩니다 (비계·건하이엔지 제외)"><input type="checkbox" id="m-auto" ${auto ? "checked" : ""}> 인건비 출역대로 자동</label>
       <label>1식 단가 <input id="m-price" class="n" inputmode="numeric" value="${fmt(st.meal_price)}" style="width:100px;text-align:right">원</label>
-      <span class="muted" style="font-size:12px">칸을 누르면 1식 표시 / 해제</span>
+      <span class="muted" style="font-size:12px">${auto ? "자동 맞춤 중 — 직접 고치려면 자동을 끄세요" : "칸을 누르면 1식 표시 / 해제"}</span>
       <span class="grow"></span><span class="sum-chip"><span data-calc="m-cnt"></span>식 · <span data-calc="m-amt"></span>원</span>
       <button class="btn" id="m-print">🖨 인쇄</button>
     </div>
@@ -691,7 +732,7 @@ function rMeal() {
         || `<tr><td colspan="${n + 8}" class="c muted" style="padding:30px">명단이 없습니다. <b>인건비 명단 불러오기</b>나 <b>+ 인원 추가</b>로 시작하세요.</td></tr>`}</tbody>
       <tfoot><tr><td class="stick"></td><td colspan="3" class="c">소 계</td>${Array.from({ length: n }, (_, k) => `<td class="dsum" data-calc="m-s-${k + 1}"></td>`).join("")}<td class="c" data-calc="m-cnt"></td><td class="n" data-calc="m-amt"></td><td colspan="2"></td></tr></tfoot>
     </table></div>
-    <p class="hint">조 = 조식, 중 = 중식. 금액 = 식수 × 1식 단가</p>`;
+    <p class="hint">조 = 조식, 중 = 중식. 금액 = 식수 × 1식 단가. 자동 맞춤은 인건비에 출역한 날마다 조식·중식을 체크하며, <b>비계·건하이엔지</b> 인원은 명단에서 뺍니다.</p>`;
   S.calc = () => {
     const price = Number(st.meal_price) || 0; let tc = 0; const per = {};
     S.rows.meal.forEach(r => {
@@ -705,11 +746,7 @@ function rMeal() {
   $("#m-price").oninput = e => { st.meal_price = num(e.target.value) || 0; mark("month"); S.calc(); };
   $("#m-price").onblur = e => e.target.value = fmt(st.meal_price);
   $("#m-add").onclick = () => { newRow("meal", { name: "", team: "", jo: {}, jung: {}, memo: "" }); rMeal(); S.calc(); focusLast(); };
-  $("#m-from").onclick = () => {
-    const have = new Set(S.rows.meal.map(r => (r.data.name || "").trim()));
-    let k = 0; sorted("labor").forEach(l => { const nm = (l.data.name || "").trim(); if (nm && !have.has(nm)) { newRow("meal", { name: nm, team: l.data.team || "", jo: {}, jung: {}, memo: "" }); have.add(nm); k++; } });
-    rMeal(); S.calc(); toast(k ? `${k}명 추가했습니다.` : "새로 추가할 사람이 없습니다.");
-  };
+  $("#m-auto").onchange = e => { st.mealAuto = e.target.checked; mark("month"); rMeal(); S.calc(); if (e.target.checked) toast("인건비 출역일에 맞춰 조식·중식을 채웠습니다."); };
   $("#m-print").onclick = () => P.printMeal(S.month, sorted("meal"));
   bindRowOps("meal", rMeal);
 }
