@@ -1,5 +1,5 @@
 // 지적도 출력 · 그림 저장: 도면을 원하는 크기로 다시 그리고 장비 표시·말풍선을 캔버스에 직접 그림
-import { kindOf } from "./icons.js";
+import { kindOf, titleOf } from "./icons.js";
 
 const FONT = 'Pretendard, "Malgun Gothic", sans-serif';
 const md = s => s ? `${+s.slice(5, 7)}/${+s.slice(8, 10)}` : "";
@@ -14,8 +14,8 @@ function icon(k) {
 // 말풍선 줄 (화면과 같은 내용)
 export function lines(m, mode) {
   const k = kindOf(m.kind), range = m.date_from && m.date_to && m.date_from !== m.date_to ? `${md(m.date_from)}~${md(m.date_to)}` : "";
-  if (mode === "short") return [{ c: "t1", t: k.id + (m.work ? " · " + m.work : "") }];
-  const out = [{ c: "t1", t: k.id, sub: m.name || "" }];
+  if (mode === "short") return [{ c: "t1", t: titleOf(m) + (m.work ? " · " + m.work : "") }];
+  const out = [{ c: "t1", t: titleOf(m), sub: m.name || "" }];
   if (m.work) out.push({ c: "t2", t: m.work });
   const t3 = [m.company, range].filter(Boolean).join(" · "); if (t3) out.push({ c: "t3", t: t3 });
   return out;

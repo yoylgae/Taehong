@@ -33,6 +33,7 @@
 - 도면 원본: AutoCAD에서 뽑은 PDF → `pdftocairo -svg` + `pdftotext -bbox` → `map/tools/extract.py` → `map/base.json`
   (선 = 폴리선, 채움 = 삼각형 묶음, 지번 = 글리프 모양 + 글자 내용). 1pt = 10 도면단위.
   새 도면으로 바꿀 때: `pdftocairo -svg a.pdf a.svg; pdftotext -bbox a.pdf a.html; python3 map/tools/extract.py a.svg a.html map/base.json`
+- 이름: 표시마다 `label`(말풍선 제목, 상세 창 🏷 이름 바꾸기 또는 입력 창 '표시 이름'), 아이콘 종류 이름은 두 번 눌러 바꾸고 site_map_doc.settings.kindNames 에 저장(현장 공통).
 - **장비·작업 배치**: 아이콘(`map/icons.js`, 직접 그린 SVG)을 끌어다 놓으면 site_map_marks 에 저장. 말풍선은 겹치지 않게 자리를 골라 지시선으로 연결.
   날짜별(작업 시작~끝)로 보이고, 작업계획서(ewp_plans) 중 지도에 없는 장비는 오른쪽 목록에서 '위치 지정'.
 - **도면 편집** (`map/cad.js`): 캔버스 캐드 — 선/폴리선/사각형/원/영역(면적)/글자/치수/거리, 이동·복사·회전·삭제, 그립 편집,

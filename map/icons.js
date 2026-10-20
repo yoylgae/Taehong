@@ -34,3 +34,8 @@ export function guessKind(t = "") {
   for (const [re, k] of rules) if (re.test(t)) return k;
   return "굴착기";
 }
+
+// 이름 바꾸기: 종류 이름(현장 공통)과 표시마다 붙이는 이름
+export const NAMES = {};
+export const kname = id => NAMES[id] || id;
+export const titleOf = m => (m.label || "").trim() || kname(m.kind);

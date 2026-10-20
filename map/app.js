@@ -2,7 +2,7 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 import { SUPABASE_URL, SUPABASE_KEY } from "../config.js";
 import { Cad, ALIAS, polyArea, polyLen } from "./cad.js";
-import { KINDS, kindOf, guessKind } from "./icons.js";
+import { KINDS, kindOf, guessKind, NAMES, kname, titleOf } from "./icons.js";
 import { renderMap, drawMarks, viewFor } from "./print.js";
 
 const $ = (s, r = document) => r.querySelector(s);
@@ -68,7 +68,20 @@ const visibleMarks = () => S.marks.filter(m => S.all || onDay(m.date_from, m.dat
 function drawAll() { drawList(); layoutMarks(true); }
 
 /* ================= 아이콘 모음 · 놓기 ================= */
-$("#pal").innerHTML = KINDS.map(k => `<div class="pk" data-kind="${esc(k.id)}" style="--c:${k.color}" title="${esc(k.id)} — 끌어서 지도에 놓기"><i>${k.svg}</i><span>${esc(k.id)}</span></div>`).join("");
+const drawPal = () => { $("#pal").innerHTML = KINDS.map(k => `<div class="pk" data-kind="${esc(k.id)}" style="--c:${k.color}" title="${esc(kname(k.id))} — 끌어서 지도에 놓기 · 두 번 누르면 이름 바꾸기"><i>${k.svg}</i><span>${esc(kname(k.id))}</span></div>`).join(""); };
+drawPal();
+// 아이콘 종류 이름 바꾸기 (현장 공통으로 저장)
+$("#pal").addEventListener("dblclick", async e => {
+  const pk = e.target.closest(".pk"); if (!pk) return; cancelPlace();
+  const id = pk.dataset.kind, v = prompt(`'${kname(id)}' 아이콘 이름을 바꿉니다.\n비워 두면 원래 이름(${id})으로 돌아갑니다.`, kname(id));
+  if (v === null) return;
+  const nv = v.trim(); if (nv && nv !== id) NAMES[id] = nv; else delete NAMES[id];
+  const { data: cur } = await sb.from("site_map_doc").select("settings").eq("id", 1).maybeSingle();
+  const settings = { ...(cur?.settings || {}), kindNames: { ...NAMES } };
+  const { error } = await sb.from("site_map_doc").upsert({ id: 1, settings });
+  if (error) return toast("이름을 저장하지 못했습니다: " + error.message);
+  drawPal(); drawAll(); toast(nv && nv !== id ? `'${id}' → '${nv}' 로 바꿨습니다.` : `'${id}' 원래 이름으로 돌렸습니다.`);
+});
 $("#pal").addEventListener("pointerdown", e => {
   const pk = e.target.closest(".pk"); if (!pk || e.button) return;
   e.preventDefault();
@@ -93,7 +106,7 @@ function startPlace(preset) {
   S.placing = preset; const k = kindOf(preset.kind);
   $$(".pk").forEach(p => p.classList.toggle("on", p.dataset.kind === preset.kind));
   const h = $("#place-hint"); h.hidden = false;
-  h.innerHTML = `<span>📍 <b>${esc(preset.name || k.id)}</b> 놓을 위치를 지도에서 누르세요</span><button type="button" id="ph-x">취소</button>`;
+  h.innerHTML = `<span>📍 <b>${esc(preset.label || preset.name || kname(k.id))}</b> 놓을 위치를 지도에서 누르세요</span><button type="button" id="ph-x">취소</button>`;
   $("#ph-x").onclick = cancelPlace;
 }
 function cancelPlace() { S.placing = null; $("#place-hint").hidden = true; $$(".pk.on").forEach(p => p.classList.remove("on")); }
@@ -105,8 +118,8 @@ function markHTML(m) { const k = kindOf(m.kind); return `<div class="pin">${k.sv
 function bubbleHTML(m) {
   const k = kindOf(m.kind), short = S.bubble === "short";
   const range = m.date_from && m.date_to && m.date_from !== m.date_to ? `${md(m.date_from)}~${md(m.date_to)}` : "";
-  if (short) return `<div class="t1"><b>${esc(k.id)}</b>${m.work ? esc(" · " + m.work) : ""}</div>`;
-  return `<div class="t1"><b>${esc(k.id)}</b>${m.name ? `<small>${esc(m.name)}</small>` : ""}</div>
+  if (short) return `<div class="t1"><b>${esc(titleOf(m))}</b>${m.work ? esc(" · " + m.work) : ""}</div>`;
+  return `<div class="t1"><b>${esc(titleOf(m))}</b>${m.name ? `<small>${esc(m.name)}</small>` : ""}</div>
     ${m.work ? `<div class="t2">${esc(m.work)}</div>` : ""}
     ${m.company || range ? `<div class="t3">${esc([m.company, range].filter(Boolean).join(" · "))}</div>` : ""}`;
 }
@@ -171,7 +184,7 @@ $("#marks").addEventListener("pointerdown", e => {
   const upf = async () => { el.removeEventListener("pointermove", mv); el.removeEventListener("pointerup", upf); o.mk.classList.remove("drag");
     if (!moved) { openPop(m); return; }
     const { error } = await sb.from("site_map_marks").update({ x: m.x, y: m.y, updated_at: new Date().toISOString() }).eq("id", m.id);
-    if (error) { m.x = ox; m.y = oy; layoutMarks(); toast("옮기지 못했습니다: " + error.message); } else toast(`${kindOf(m.kind).id} 위치를 옮겼습니다.`); };
+    if (error) { m.x = ox; m.y = oy; layoutMarks(); toast("옮기지 못했습니다: " + error.message); } else toast(`${titleOf(m)} 위치를 옮겼습니다.`); };
   el.addEventListener("pointermove", mv); el.addEventListener("pointerup", upf);
 });
 
@@ -182,18 +195,25 @@ function openPop(m) {
   const range = [m.date_from, m.date_to].filter(Boolean); const rs = range.length === 2 && range[0] !== range[1] ? `${range[0]} ~ ${range[1]}` : range[0] || "기간 없음";
   p.style.setProperty("--c", k.color);
   p.innerHTML = `<button type="button" class="x" id="p-x">✕</button>
-    <h4><span class="mk-ic" style="--c:${k.color}">${k.svg}</span><span>${esc(k.id)} ${m.name ? `<small>${esc(m.name)}</small>` : ""}</span></h4>
+    <h4><span class="mk-ic" style="--c:${k.color}">${k.svg}</span><span>${esc(titleOf(m))} ${m.name ? `<small>${esc(m.name)}</small>` : ""}</span></h4>
     <dl><dt>작업</dt><dd><b>${esc(m.work || "-")}</b></dd><dt>업체</dt><dd>${esc(m.company || "-")}</dd>
     <dt>기간</dt><dd>${esc(rs)}</dd>${m.manager || m.phone ? `<dt>담당</dt><dd>${esc(m.manager || "")} ${m.phone ? `<a href="tel:${esc(m.phone)}">${esc(m.phone)}</a>` : ""}</dd>` : ""}
     ${plan ? `<dt>계획서</dt><dd>${esc(plan.work_name || "")} <small>(${esc(plan.status || "")})</small></dd>` : ""}
     ${m.memo ? `<dt>메모</dt><dd>${esc(m.memo)}</dd>` : ""}</dl>
-    <div class="row">${plan ? `<button type="button" class="btn" id="p-plan">📋 작업계획서</button>` : ""}<button type="button" class="btn primary" id="p-edit">✏️ 고치기</button></div>`;
+    <div class="row">${plan ? `<button type="button" class="btn" id="p-plan">📋 작업계획서</button>` : ""}<button type="button" class="btn" id="p-name">🏷 이름 바꾸기</button><button type="button" class="btn primary" id="p-edit">✏️ 고치기</button></div>`;
   p.hidden = false;
   const [sx, sy] = cad.toS(m.x, m.y), W = cad.W, pw = 270, ph = p.offsetHeight;
   p.style.left = Math.max(8, Math.min(W - pw - 8, sx + 28)) + "px";
   p.style.top = Math.max(8, Math.min(cad.H - ph - 8, sy - ph / 2 - 20)) + $("#stage").offsetTop + "px";
   $("#p-x").onclick = closePop;
   $("#p-edit").onclick = () => { closePop(); openEditor(m); };
+  $("#p-name").onclick = async () => {
+    const v = prompt(`말풍선에 보일 이름을 넣으세요.\n비워 두면 '${kname(m.kind)}' 로 보입니다.`, titleOf(m)); if (v === null) return;
+    const label = v.trim() && v.trim() !== kname(m.kind) ? v.trim() : null;
+    const { error } = await sb.from("site_map_marks").update({ label, updated_at: new Date().toISOString() }).eq("id", m.id);
+    if (error) return toast("저장하지 못했습니다: " + error.message);
+    m.label = label; closePop(); drawAll(); openPop(m); toast(`이름을 '${titleOf(m)}' 로 바꿨습니다.`);
+  };
   $("#p-plan")?.addEventListener("click", () => openPlan(m.plan_id));
 }
 function closePop() { if ($("#pop").hidden) return; $("#pop").hidden = true; S.sel = null; layoutMarks(); drawList(); }
@@ -207,7 +227,7 @@ let editing = null;
 function openEditor(m) {
   editing = { ...m };
   const f = $("#f-mark"), d = $("#dlg-mark");
-  for (const k of ["name", "company", "work", "manager", "phone", "date_from", "date_to", "memo"]) f[k].value = m[k] || "";
+  for (const k of ["label", "name", "company", "work", "manager", "phone", "date_from", "date_to", "memo"]) f[k].value = m[k] || "";
   const plans = S.plans.filter(p => p.id === m.plan_id || !m.date_from || !p.work_start || (p.work_start <= (m.date_to || m.date_from) && (!p.work_end || p.work_end >= m.date_from)));
   f.plan_id.innerHTML = `<option value="">연결 안 함</option>` + plans.map(p => `<option value="${p.id}">${esc([p.equip_type, p.reg_no].filter(Boolean).join(" "))} · ${esc(p.work_name || "")} (${md(p.work_start)}~${md(p.work_end)})</option>`).join("");
   f.plan_id.value = m.plan_id || "";
@@ -217,7 +237,8 @@ function openEditor(m) {
 }
 function drawKinds() {
   const k = kindOf(editing.kind); $("#m-ic").innerHTML = k.svg; $("#m-ic").style.setProperty("--c", k.color);
-  $("#m-kinds").innerHTML = KINDS.map(x => `<button type="button" data-k="${esc(x.id)}" class="${x.id === editing.kind ? "on" : ""}" style="--c:${x.color}"><i>${x.svg}</i>${esc(x.id)}</button>`).join("");
+  $("#m-kinds").innerHTML = KINDS.map(x => `<button type="button" data-k="${esc(x.id)}" class="${x.id === editing.kind ? "on" : ""}" style="--c:${x.color}"><i>${x.svg}</i>${esc(kname(x.id))}</button>`).join("");
+  $("#f-mark").label.placeholder = `비우면 "${kname(editing.kind)}"`;
 }
 $("#m-kinds").onclick = e => { const b = e.target.closest("[data-k]"); if (b) { editing.kind = b.dataset.k; drawKinds(); } };
 $("#f-mark").plan_id.onchange = e => {
@@ -231,7 +252,7 @@ $("#f-mark").plan_id.onchange = e => {
 $("#dlg-mark").addEventListener("close", async () => {
   if ($("#dlg-mark").returnValue !== "save" || !editing) return;
   const f = $("#f-mark"), v = k => f[k].value.trim() || null;
-  const row = { kind: editing.kind, x: editing.x, y: editing.y, name: v("name"), company: v("company"), work: v("work"), manager: v("manager"), phone: v("phone"),
+  const row = { kind: editing.kind, x: editing.x, y: editing.y, label: v("label"), name: v("name"), company: v("company"), work: v("work"), manager: v("manager"), phone: v("phone"),
     date_from: v("date_from"), date_to: v("date_to") || v("date_from"), memo: v("memo"), plan_id: v("plan_id"), updated_at: new Date().toISOString() };
   if (row.date_from && row.date_to && row.date_to < row.date_from) [row.date_from, row.date_to] = [row.date_to, row.date_from];
   if (editing.id) {
@@ -244,7 +265,7 @@ $("#dlg-mark").addEventListener("close", async () => {
     S.marks.push(data);
     if (!S.all && !onDay(row.date_from, row.date_to)) toast(`저장했습니다. 작업 기간(${row.date_from}~)이 보고 있는 날짜와 달라 지금은 안 보입니다.`, 4500);
   }
-  toast(`${kindOf(row.kind).id} — ${row.work || ""} 저장했습니다.`);
+  toast(`${titleOf(row)} — ${row.work || ""} 저장했습니다.`);
   editing = null; drawAll();
 });
 $("#m-del").onclick = async () => {
@@ -263,8 +284,8 @@ function drawList() {
   const day = S.all ? "전체 기간" : `${S.day} (${"일월화수목금토"[new Date(S.day + "T00:00:00").getDay()]})`;
   $("#tab-list").innerHTML = `
     <div class="sec-t"><span>${esc(day)} 작업</span><small>${list.length}건</small></div>
-    ${list.length ? `<div class="sum">${Object.entries(cnt).map(([k, n]) => { const K = kindOf(k); return `<span style="--c:${K.color}"><i>${K.svg}</i>${esc(K.id)} ${n}</span>`; }).join("")}</div>` : ""}
-    ${list.length ? list.map(m => { const k = kindOf(m.kind); return `<div class="it ${S.sel === m.id ? "sel" : ""}" data-id="${m.id}" style="--c:${k.color}"><span class="ic">${k.svg}</span><div class="tx"><b>${esc(k.id)}<em>${esc(m.name || "")}</em></b><div>${esc(m.work || "-")}</div><small>${esc([m.company, m.date_from && m.date_to && m.date_from !== m.date_to ? `${md(m.date_from)}~${md(m.date_to)}` : ""].filter(Boolean).join(" · "))}</small></div></div>`; }).join("")
+    ${list.length ? `<div class="sum">${Object.entries(cnt).map(([k, n]) => { const K = kindOf(k); return `<span style="--c:${K.color}"><i>${K.svg}</i>${esc(kname(k))} ${n}</span>`; }).join("")}</div>` : ""}
+    ${list.length ? list.map(m => { const k = kindOf(m.kind); return `<div class="it ${S.sel === m.id ? "sel" : ""}" data-id="${m.id}" style="--c:${k.color}"><span class="ic">${k.svg}</span><div class="tx"><b>${esc(titleOf(m))}<em>${esc(m.name || "")}</em></b><div>${esc(m.work || "-")}</div><small>${esc([m.company, m.date_from && m.date_to && m.date_from !== m.date_to ? `${md(m.date_from)}~${md(m.date_to)}` : ""].filter(Boolean).join(" · "))}</small></div></div>`; }).join("")
       : `<div class="empty">이 날 지도에 놓인 장비·작업이 없습니다.<br>위 아이콘을 지도에 끌어다 놓으세요.</div>`}
     ${plans.length ? `<div class="sec-t" style="margin-top:14px"><span>작업계획서 장비 · 지도에 없음</span><small>${plans.length}건</small></div>
       ${plans.map(p => { const k = kindOf(guessKind(p.equip_type + " " + (p.spec || ""))); return `<div class="plan" style="--c:${k.color}"><span class="it" style="padding:0"><span class="ic" style="width:28px;height:28px">${k.svg}</span></span><div class="tx"><b>${esc([p.equip_type, p.spec].filter(Boolean).join(" "))} · ${esc(p.work_name || "")}</b><small>${esc(p.company_name || "")} ${md(p.work_start)}~${md(p.work_end)}</small></div><button type="button" data-plan="${p.id}">📍 위치 지정</button></div>`; }).join("")}` : ""}`;
@@ -433,7 +454,7 @@ $("#q").addEventListener("input", () => {
   const q = $("#q").value.replace(/\s+/g, ""), L = $("#q-list");
   if (!q) { L.hidden = true; return; }
   found = cad.ents.filter(e => (e.t === "gl" || e.t === "tx") && e.s && e.s.replace(/\s+/g, "").includes(q)).slice(0, 40);
-  const ms = S.marks.filter(m => [m.kind, m.name, m.work, m.company].some(v => (v || "").replace(/\s+/g, "").includes(q))).slice(0, 10);
+  const ms = S.marks.filter(m => [m.kind, kname(m.kind), m.label, m.name, m.work, m.company].some(v => (v || "").replace(/\s+/g, "").includes(q))).slice(0, 10);
   L.innerHTML = [...ms.map(m => `<div data-m="${m.id}"><span>${esc(kindOf(m.kind).id)} · ${esc(m.work || "")}</span><small>${esc(m.date_from || "")}</small></div>`),
     ...found.map((e, i) => `<div data-i="${i}"><span>${esc(e.s)}</span><small>${e.t === "gl" ? "지번" : "글자"}</small></div>`)].join("") || `<div><small>찾는 글자가 없습니다</small></div>`;
   L.hidden = false;
@@ -532,7 +553,7 @@ $("#pr-go").onclick = async () => {
     const o = printOpts(), r = await composePage(o, 2.4);
     const blob = await new Promise(res => r.canvas.toBlob(res, "image/png"));
     const url = URL.createObjectURL(blob);
-    const rows = o.list ? r.list.map((m, i) => `<tr><td class="n">${i + 1}</td><td><b style="color:${kindOf(m.kind).color}">${esc(kindOf(m.kind).id)}</b></td><td>${esc(m.name || "")}</td><td>${esc(m.work || "")}</td><td>${esc(m.company || "")}</td><td>${esc([m.manager, m.phone].filter(Boolean).join(" "))}</td><td class="d">${esc(m.date_from === m.date_to ? m.date_from || "" : `${m.date_from || ""} ~ ${m.date_to || ""}`)}</td><td>${esc(m.memo || "")}</td></tr>`).join("") : "";
+    const rows = o.list ? r.list.map((m, i) => `<tr><td class="n">${i + 1}</td><td><b style="color:${kindOf(m.kind).color}">${esc(titleOf(m))}</b></td><td>${esc(m.name || "")}</td><td>${esc(m.work || "")}</td><td>${esc(m.company || "")}</td><td>${esc([m.manager, m.phone].filter(Boolean).join(" "))}</td><td class="d">${esc(m.date_from === m.date_to ? m.date_from || "" : `${m.date_from || ""} ~ ${m.date_to || ""}`)}</td><td>${esc(m.memo || "")}</td></tr>`).join("") : "";
     const html = `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>${esc(o.title)}</title>
       <style>@page{size:${o.paper} ${o.orient};margin:8mm}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}
       body{margin:0;font-family:Pretendard,"Malgun Gothic",sans-serif;color:#111827}
@@ -582,6 +603,7 @@ async function loadDoc() {
   const { data, error } = await sb.from("site_map_doc").select("*").eq("id", 1).maybeSingle();
   if (error) toast("도면 수정 내용을 불러오지 못했습니다: " + error.message, 5000);
   S.rev = data?.rev || 0;
+  for (const k of Object.keys(NAMES)) delete NAMES[k]; Object.assign(NAMES, data?.settings?.kindNames || {}); drawPal();
   const view = cad.W && cad.doc ? { ...cad.view } : null;
   cad.base = new Map();
   cad.load(JSON.parse(JSON.stringify(BASE)), data?.edits || {});

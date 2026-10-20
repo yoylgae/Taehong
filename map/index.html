@@ -40,7 +40,7 @@
 
   <!-- 장비 아이콘 모음 (배치 모드) -->
   <section class="palette" id="palette">
-    <p class="pal-hint"><b>아이콘을 지도 위에 끌어다 놓으세요</b> · 누른 뒤 지도를 눌러도 됩니다 · 놓은 아이콘은 끌어서 옮기고, 누르면 내용을 고칩니다</p>
+    <p class="pal-hint"><b>아이콘을 지도 위에 끌어다 놓으세요</b> · 누른 뒤 지도를 눌러도 됩니다 · 놓은 아이콘은 끌어서 옮기고, 누르면 내용·이름을 고칩니다 · 아이콘을 <b>두 번 누르면</b> 종류 이름을 바꿉니다</p>
     <div class="pal" id="pal"></div>
   </section>
 
@@ -130,6 +130,7 @@
     <h3><span class="mk-ic" id="m-ic"></span><span id="m-title">장비·작업</span></h3>
     <div class="kinds" id="m-kinds"></div>
     <div class="fg">
+      <label class="wide"><span>표시 이름 <small style="font-weight:500;color:#9aa1ad">— 말풍선 제목. 자유롭게 바꿀 수 있습니다 (예: 현장사무실 A동, 1번 세륜기)</small></span><input name="label"></label>
       <label><span>장비명·호기</span><input name="name" placeholder="예: 0.6W 1호기, 25톤"></label>
       <label><span>업체</span><input name="company" placeholder="예: 대두이앤지"></label>
       <label class="wide"><span>작업 내용</span><input name="work" placeholder="예: 터파기 및 토사 상차" required></label>
