@@ -19,6 +19,7 @@ const store = { get(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? 
 const MENUS = [
   { name: "공사관리", items: [
     { id: "map", name: "현장 지적도", icon: "🗺", url: "map/" },
+    { id: "ilbo", name: "작업일보", icon: "📝", url: "ilbo/" },
     { id: "jy", name: "직영실행", icon: "📒", url: "jy/" },
     { id: "waste", name: "폐기물 반출 현황", icon: "🚛", url: "https://meko-gdenc.vercel.app/", newWindow: true },
   ] },
