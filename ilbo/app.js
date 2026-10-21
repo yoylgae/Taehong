@@ -264,7 +264,10 @@ function attSummary(d) {
 /* ---------- 안전교육일지 ---------- */
 function eduOf(d, name) {
   d.edu = d.edu || {};
-  if (!d.edu[name]) { const df = S.eduDefaults?.[name] || {}; d.edu[name] = { project: df.project || "", company: df.company || "", place: df.place || "", teacher: df.teacher || "", boss: df.boss || "", items: (df.items || []).slice(), attendees: [], auto: true, skip: false }; }
+  if (!d.edu[name]) {
+    const pv = S.days.filter(x => x.day < S.day && x.data.edu?.[name]).at(-1)?.data.edu[name];
+    if (pv) { d.edu[name] = clone(pv); if (d.edu[name].auto !== false) d.edu[name].attendees = []; return d.edu[name]; }
+    const df = S.eduDefaults?.[name] || {}; d.edu[name] = { project: df.project || "", company: df.company || "", place: df.place || "", teacher: df.teacher || "", boss: df.boss || "", items: (df.items || []).slice(), attendees: [], auto: true, skip: false }; }
   return d.edu[name];
 }
 function rEdu() {
@@ -342,24 +345,24 @@ function showNotes(title, notes, file) {
 }
 $("#x-report").onclick = async () => {
   if (!S.byDay.has(S.day)) return toast("이 날짜 일보가 없습니다.");
-  await flush(); busy(true, "작업일보 엑셀 만드는 중…");
+  await flush(); busy(true, "작업일보 통합 엑셀 만드는 중… (모든 날짜)");
   try {
     const { exportReport } = await import("./export.js");
     const tpl = await getTpl("report");
     const r = await exportReport(tpl, S.days.map(x => ({ day: x.day, data: derive(x.data), edited: x.edited || x.src === "web" })), S.day);
-    const name = `작업일보_${S.day}.xlsx`; download(r.blob, name); busy(false); showNotes("작업일보 엑셀", r.notes, name);
+    const name = `작업일보_통합_${S.day}까지.xlsx`; download(r.blob, name); busy(false); showNotes("작업일보 통합 엑셀", r.notes, name);
   } catch (e) { console.error(e); busy(false); toast("만들지 못했습니다: " + (e.message || e), 6000); }
 };
-$("#x-edu").onclick = async () => {
+const eduReady = d => { d = clone(d); for (const n of Object.keys(S.eduDefaults || {})) eduOf(d, n); for (const e of Object.values(d.edu || {})) if (e.auto !== false) e.attendees = (d.workers || []).filter(w => w.name).map(w => w.name); return d; };
+$("#x-day").onclick = async () => {
   const x = S.byDay.get(S.day); if (!x) return toast("이 날짜 일보가 없습니다.");
-  await flush(); busy(true, "안전교육일지 엑셀 만드는 중…");
+  await flush(); busy(true, `${S.day} 일보 엑셀 만드는 중…`);
   try {
-    const { exportEdu } = await import("./export.js");
-    const tpl = await getTpl("edu"), d = clone(x.data);
-    for (const n of Object.keys(S.eduDefaults || {})) eduOf(d, n);
-    for (const e of Object.values(d.edu || {})) if (e.auto !== false) e.attendees = (d.workers || []).filter(w => w.name).map(w => w.name);
-    const r = await exportEdu(tpl, { day: S.day, data: d });
-    const name = `일일안전교육일지_${S.day}.xlsx`; download(r.blob, name); busy(false); showNotes("안전교육일지 엑셀", r.notes, name);
+    const { exportDaily } = await import("./export.js");
+    if (!S.eduDefaults) await loadEduDefaults();
+    const [rep, edu] = await Promise.all([getTpl("report"), getTpl("edu").catch(() => null)]);
+    const r = await exportDaily(rep, edu, [{ day: x.day, data: eduReady(derive(x.data)), edited: x.edited || x.src === "web" }], S.day);
+    const name = `작업일보_${S.day}.xlsx`; download(r.blob, name); busy(false); showNotes(`${S.day} 일보 엑셀`, r.notes, name);
   } catch (e) { console.error(e); busy(false); toast("만들지 못했습니다: " + (e.message || e), 6000); }
 };
 $("#x-tpl").onclick = () => {

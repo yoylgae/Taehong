@@ -1,5 +1,6 @@
 // 작업일보 · 안전교육일지 엑셀 저장 — 올린 양식 파일에서 값 칸만 바꾸고, 공사일보 (2)에는 날짜 묶음을 그대로 복사해 이어 붙임
 import { openBook, Calc, NS, colName, splitRef, _shiftFormula as shiftFormula } from "../jy/export-xlsx.js";
+import { removeSheet, renameSheet, orderSheets, setPrintArea, importSheet, finish } from "./xbook.js";
 
 const K = s => String(s ?? "").replace(/\s+/g, "");
 const A = (c, r) => colName(c) + r;
@@ -168,8 +169,12 @@ function fillAttendance(book, sh, x, notes) {
 }
 
 /* ================= 일일 안전교육 일지 ================= */
-export async function exportEdu(file, x, opts = {}) {
+export async function exportEdu(file, x) {
   const notes = [], book = await openBook(await file.arrayBuffer());
+  await fillEdu(book, x, notes);
+  return { blob: await book.save(), notes };
+}
+async function fillEdu(book, x, notes) {
   const [y, m, dd] = x.day.split("-").map(Number);
   for (const name of book.names) {
     const e = x.data.edu?.[name]; const sh = await book.sheet(name);
@@ -189,7 +194,6 @@ export async function exportEdu(file, x, opts = {}) {
     if (names.length > cap) notes.push(`⚠ ${name}: 참석자 ${names.length}명 중 ${cap}명만 들어갔습니다.`);
     notes.push(`${name}: ${x.day} · 참석자 ${Math.min(names.length, cap)}명`);
   }
-  return { blob: await book.save(), notes };
 }
 
 /* ================= 양식에서 기본값 읽기 (안전교육일지 시트 목록 등) ================= */
@@ -203,4 +207,64 @@ export async function readEduDefaults(file) {
     out[name] = { project: right("공사명"), company: right("회사명"), place: right("교육장소"), teacher: right("교육담당").replace(/\(서명\)/, "").trim(), boss: right("현장소장").replace(/\(서명\)/, "").trim(), items, rows: items.length };
   }
   return out;
+}
+
+/* ================= 하루치 파일: 그날 공사일보 한 장 + 출력일보 + 안전교육일지 ================= */
+export async function exportDaily(reportFile, eduFile, days, target) {
+  const notes = [], book = await openBook(await reportFile.arrayBuffer());
+  const arch = book.list.map(s => s.name).find(n => /공사일보/.test(n) && /\(2\)/.test(n)) || book.find(n => /공사일보/.test(n));
+  if (!arch) throw new Error("양식에서 '공사일보' 시트를 찾지 못했습니다.");
+  const sh = await book.sheet(arch); let mi = mergeIndex(sh);
+  const starts = [...sh.rows.keys()].filter(r => K(sh.text(1, r)) === "공사일보").sort((a, b) => a - b);
+  if (!starts.length) throw new Error(`'${arch}' 시트에서 '공 사 일 보' 제목을 찾지 못했습니다.`);
+  const maxRow = Math.max(...sh.rows.keys()), span = starts.length > 1 ? starts.at(-1) - starts.at(-2) : maxRow - starts[0] + 1;
+  const ends = starts.map((s, i) => i + 1 < starts.length ? starts[i + 1] - 1 : Math.max(s + span - 1, maxRow));
+  const blocks = starts.map((s, i) => { const B = blockInfo(sh, mi, s, ends[i]); const dp = B?.right("날짜"); const v = dp ? sh.raw(dp.c, dp.r) : null; return { s, e: ends[i], B, day: typeof v === "number" ? fromSerial(v) : null }; });
+  const last = blocks.at(-1), x = days.find(d => d.day === target); if (!x) throw new Error("그 날짜 일보가 없습니다.");
+  const own = blocks.find(b => b.day === target);
+  const fill = !own || x.edited;
+  const src = own && (!fill || (own.B && own.B.sig === last.B?.sig)) ? own : last;
+  if (fill && !src.B) throw new Error("공사일보 묶음 모양을 읽지 못했습니다.");
+  // 그 묶음만 남기고 1행으로 올림
+  const L = src.e - src.s + 1, dr = 1 - src.s, inBlk = r => r >= src.s && r <= src.e;
+  for (const [r, row] of [...sh.rows]) if (!inBlk(r)) { row.el.remove(); sh.rows.delete(r); }
+  const moved = [...sh.rows].sort((a, b) => a[0] - b[0]); sh.rows.clear();
+  for (const [r, row] of moved) {
+    const nr = r + dr; row.el.setAttribute("r", nr); row.el.removeAttribute("spans"); const cells = new Map();
+    for (const [c, el] of row.cells) {
+      el.setAttribute("r", A(c, nr)); cells.set(c, el);
+      const f = el.getElementsByTagNameNS(NS, "f")[0];
+      if (f) {
+        const out = [...f.textContent.matchAll(/(?<![A-Za-z0-9_.$])\$?[A-Z]{1,3}\$?(\d+)(?![\d(A-Za-z_])/g)].some(m => !inBlk(+m[1]));
+        if (out) el.removeChild(f);   // 다른 날짜를 가리키는 수식은 계산된 값만 남김
+        else f.textContent = shiftFormula(f.textContent, dr, 0);
+      }
+    }
+    sh.rows.set(nr, { el: row.el, cells });
+  }
+  const keep = sh.mergeRefs().map(m => m.getAttribute("ref")).filter(ref => { const [a, b = a] = ref.split(":"); return inBlk(splitRef(a).r) && inBlk(splitRef(b).r); });
+  sh.setMerges(() => true, keep.map(ref => ref.split(":").map(a => { const p = splitRef(a); return A(p.c, p.r + dr); }).join(":")));
+  for (const t of ["rowBreaks", "conditionalFormatting", "dataValidations", "hyperlinks"]) for (const e of [...sh.doc.getElementsByTagNameNS(NS, t)]) e.remove();
+  const dim = sh.doc.getElementsByTagNameNS(NS, "dimension")[0]; if (dim) dim.setAttribute("ref", `A1:V${L}`);
+  for (const sv of sh.doc.getElementsByTagNameNS(NS, "sheetView")) { sv.removeAttribute("topLeftCell"); sv.removeAttribute("view"); sv.setAttribute("tabSelected", "1"); for (const s of [...sv.getElementsByTagNameNS(NS, "selection")]) { s.setAttribute("activeCell", "C6"); s.setAttribute("sqref", "C6"); s.removeAttribute("pane"); } }
+  sh.dirty = true;
+  mi = mergeIndex(sh);
+  if (fill) { const B = blockInfo(sh, mi, 1, L); fillBlock(sh, B, x.data, target, notes); const fail = await recalc(new Calc(book), sh, 1, L); if (fail) notes.push(`수식 ${fail}칸은 엑셀이 열 때 계산합니다.`); }
+  notes.push(`공사일보: ${target} 한 장${fill ? (own ? " (웹에서 고친 내용)" : " (웹에서 쓴 내용)") : " (엑셀 원본 그대로)"}`);
+  // 예전 '공사일보' 시트는 빼고, 이 시트를 '공사일보'로
+  const oldMain = book.names.find(n => K(n) === "공사일보" && n !== arch); if (oldMain) await removeSheet(book, oldMain);
+  renameSheet(book, arch, "공사일보"); setPrintArea(book, "공사일보", `$A$1:$V$${L}`);
+  // 출력일보
+  const attName = book.find(n => /출력일보|출력자명부/.test(n));
+  if (attName) { const ash = await book.sheet(attName); fillAttendance(book, ash, x, notes); for (const sv of ash.doc.getElementsByTagNameNS(NS, "sheetView")) sv.removeAttribute("tabSelected"); ash.dirty = true; }
+  // 안전교육일지 시트 가져오기
+  const order = ["공사일보", attName].filter(Boolean);
+  if (eduFile) {
+    const eb = await openBook(await eduFile.arrayBuffer());
+    await fillEdu(eb, x, notes);
+    for (const n of eb.names) { if (x.data.edu?.[n]?.skip) continue; let nn = n; while (book.names.includes(nn)) nn += " (교육)"; await importSheet(book, eb, n, nn); order.push(nn); }
+  }
+  orderSheets(book, order);
+  await finish(book);
+  return { blob: await book.save(), notes };
 }
