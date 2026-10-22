@@ -221,3 +221,11 @@ a.btn{text-decoration:none;color:inherit;display:inline-flex;align-items:center}
 .chk-list td select{font-size:12px;padding:3px 6px;max-width:170px}
 .chk-list td .btn{padding:4px 12px;font-size:12px}
 .chk-list td.none{color:#b5bac4}
+
+/* 반입전 점검표 · 서약서 */
+.form-prints{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px;padding:10px 12px;background:#f5f8ff;border:1px solid #dbe6ff;border-radius:10px;font-size:13px}
+.form-prints b{color:#1d4ed8}
+.form-prints select{padding:4px 8px;border:1px solid var(--line);border-radius:7px}
+.form-prints .fp-name{font-weight:600}
+.form-prints .fp-note{font-size:12px;flex-basis:100%}
+.nowrap{white-space:nowrap}

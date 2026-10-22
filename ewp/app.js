@@ -1,6 +1,7 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 import { SUPABASE_URL, SUPABASE_KEY } from "../config.js";
 import { buildPrintHtml } from "./print.js";
+import { formChoices, buildFormsHtml, pledgeNote } from "./forms.js";
 import { CHECKLISTS, EQUIP_CHECKLIST, buildChecklistHtml, buildOriginalHtml } from "./checklist.js";
 
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -214,12 +215,20 @@ async function renderList() {
         : keys.length ? esc(CHECKLISTS[keys[0]].name) : `<span class="none">해당 점검표 없음</span>`;
       return `<tr data-id="${r.id}"><td class="c">${i + 1}</td><td>${esc(r.equip_type)}</td><td class="c">${esc(r.reg_no)}</td><td>${esc(r.model_name)}</td><td class="c">${esc(r.make_year)}</td>
         <td class="c">${esc(r.in_date)}</td><td class="c">${esc(r.driver)}</td><td class="c">${esc(r.work_start)} ~ ${esc(r.work_end)}</td>
-        <td class="c">${pick}</td><td class="c">${keys.length ? `<button type="button" class="btn primary chk-print">출력</button>` : ""}</td></tr>`;
-    }).join("") : `<tr><td colspan="10" class="muted c">작업계획서가 없습니다.</td></tr>`;
+        <td class="c">${pick}</td><td class="c">${keys.length ? `<button type="button" class="btn primary chk-print">출력</button>` : ""}</td>
+        <td class="c nowrap">${formChoices(r.equip_type).length ? `<button type="button" class="btn sm form-print" data-what="pre">반입전 점검표</button> <button type="button" class="btn sm form-print" data-what="pledge">서약서</button>` : ""}</td></tr>`;
+    }).join("") : `<tr><td colspan="11" class="muted c">작업계획서가 없습니다.</td></tr>`;
   };
   drawChk();
   $("#chk-q").oninput = drawChk;
   $("#chk-body").onclick = e => {
+    const fb = e.target.closest(".form-print");
+    if (fb) {
+      const tr = fb.closest("tr"), r = rows0.find(x => x.id === tr.dataset.id), ch = formChoices(r.equip_type);
+      const kind = tr.querySelector("[data-kind]")?.value; const c = ch.find(x => x.key === kind) || ch[0];
+      printForms(c.id, r, r.drivers.split(" ").filter(Boolean), { pre: fb.dataset.what === "pre", pledge: fb.dataset.what === "pledge" });
+      return;
+    }
     if (!e.target.matches(".chk-print")) return;
     const tr = e.target.closest("tr"), r = rows0.find(x => x.id === tr.dataset.id);
     const key = tr.querySelector("[data-kind]")?.value || EQUIP_CHECKLIST[r.equip_type][0];
@@ -229,6 +238,43 @@ async function renderList() {
   try { $("#chk-form").value = localStorage.getItem("ewp.chkForm") || "new"; } catch {}
   $("#chk-form").onchange = e => { try { localStorage.setItem("ewp.chkForm", e.target.value); } catch {} };
   if (sessionStorage.getItem("ewp.sub") === "chk") document.querySelector('.subtabs button[data-sub="chk"]').click();
+}
+
+// 반입전 점검표 · 운전원 서약서 출력 (새 창)
+function printForms(id, plan, drivers, what) {
+  const w = window.open("", "_blank");
+  if (!w) return toast("팝업이 차단되었습니다. 팝업을 허용해주세요.");
+  const html = buildFormsHtml({ id, plan, drivers, what, imgBase: new URL("forms/", location.href).href });
+  const url = URL.createObjectURL(new Blob([html], { type: "text/html;charset=utf-8" }));
+  w.location.replace(url);
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+// 작성 화면: 장비를 고르면 반입전 점검표 · 서약서 출력 단추
+function drawFormPrints() {
+  const box = $("#form-prints"); if (!box) return;
+  const et = $("#equip_type").value, ch = formChoices(et);
+  if (!et) { box.innerHTML = `<span class="muted">장비명을 고르면 반입전 점검표 · 운전원 서약서를 출력할 수 있습니다.</span>`; return; }
+  if (!ch.length) { box.innerHTML = `<span class="muted">${esc(et)}: 건설장비 안전관리 가이드(2026)에 반입전 점검표·서약서 양식이 없는 장비입니다.</span>`; return; }
+  const prev = box.querySelector("select")?.value;
+  box.innerHTML = `<b>반입전 서류</b>
+    ${ch.length > 1 ? `<select id="fp-kind">${ch.map(c => `<option value="${c.id}" ${c.id === prev ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</select>` : `<span class="fp-name">${esc(ch[0].name)}</span>`}
+    <button type="button" class="btn sm dark" data-fp="pre">📄 반입전 점검표</button>
+    <button type="button" class="btn sm dark" data-fp="pledge">✍ 운전원 서약서</button>
+    <button type="button" class="btn sm" data-fp="both">둘 다 출력</button>
+    <span class="muted fp-note">${esc(pledgeNote((box.querySelector("#fp-kind")?.value || ch[0].id).split(":")[0]))}</span>`;
+  const note = () => { const k = ($("#fp-kind")?.value || ch[0].id).split(":")[0]; box.querySelector(".fp-note").textContent = pledgeNote(k) || "현장명·차량번호·제조사·모델명·규격·연식·반입일·운전원이 양식 빈칸에 들어갑니다. 운전원이 여러 명이면 서약서가 한 명씩 나옵니다."; };
+  note(); $("#fp-kind")?.addEventListener("change", note);
+}
+function onFormPrint(e) {
+  const b = e.target.closest("[data-fp]"); if (!b) return;
+  const et = $("#equip_type").value, ch = formChoices(et); if (!ch.length) return;
+  const id = $("#fp-kind")?.value || ch[0].id;
+  const { plan, personnel } = collect($("#f"));
+  const drivers = personnel.filter(p => p.role === "운전원").map(p => p.name).filter(Boolean);
+  if (!drivers.length && plan.approver4) drivers.push(plan.approver4);
+  const what = b.dataset.fp === "both" ? { pre: true, pledge: true } : { pre: b.dataset.fp === "pre", pledge: b.dataset.fp === "pledge" };
+  if (what.pledge && !drivers.length) toast("운전원이 아직 없어 이름 칸을 비워 출력합니다.");
+  printForms(id, plan, drivers, what);
 }
 
 // 일일점검표 출력 (새 창)
@@ -355,6 +401,9 @@ async function renderEdit(id) {
   syncTabs(); syncPeriods(); calc();
 
   $("#btn-print").onclick = printPlan;
+  $("#equip_type").addEventListener("change", drawFormPrints);
+  $("#form-prints").addEventListener("click", onFormPrint);
+  drawFormPrints();
 
   $("#btn-del").onclick = async () => {
     if (!confirm("이 작업계획서를 삭제할까요?")) return;
