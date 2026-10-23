@@ -1,0 +1,26 @@
+.ppt{border:2px dashed #c7d8ff;background:#f6f9ff;border-radius:14px;padding:14px 16px;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.ppt.drag{background:#eaf1ff;border-color:var(--accent)}
+.ppt b{font-size:14px}
+.ppt .grow{flex:1;min-width:200px}
+.ppt small{color:var(--muted)}
+.lv{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.lv button{border:0;background:#fff;padding:6px 11px;cursor:pointer;font-weight:700;font-size:12.5px;color:var(--muted)}
+.lv button.on{background:var(--accent);color:#fff}
+textarea.content{width:100%;min-height:360px;font-size:13.5px;line-height:1.65;padding:10px 12px}
+textarea.legal{width:100%;min-height:150px;font-size:13px;line-height:1.6;background:#fafbfc}
+.meth{display:flex;flex-wrap:wrap;gap:6px 16px}
+.meth label{display:inline-flex;gap:5px;align-items:center;font-size:13px;cursor:pointer}
+.rate{font-weight:800;color:var(--accent)}
+.att-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:6px}
+.att-grid .a{display:flex;gap:6px;align-items:center;border:1px solid var(--line2);border-radius:9px;padding:4px 6px;font-size:13px}
+.att-grid .a span.n{width:22px;text-align:right;color:var(--soft);font-size:11px}
+.att-grid .a input{flex:1;padding:4px 6px}
+.att-grid .a input.c{flex:.8}
+.att-grid .a button{border:0;background:none;color:var(--soft);cursor:pointer}
+.photos{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
+.photos figure{margin:0;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#f8fafc;position:relative}
+.photos img{width:100%;height:150px;object-fit:cover;display:block}
+.photos figcaption{padding:4px 6px}
+.photos figcaption input{width:100%;font-size:12px;padding:3px 6px}
+.photos figure button{position:absolute;top:6px;right:6px;border:0;background:rgba(0,0,0,.55);color:#fff;border-radius:7px;cursor:pointer;padding:2px 7px}
+.prev{white-space:pre-wrap;font-size:12.5px;line-height:1.55;background:#f8fafc;border:1px solid var(--line);border-radius:10px;padding:10px 12px;max-height:46vh;overflow:auto}
