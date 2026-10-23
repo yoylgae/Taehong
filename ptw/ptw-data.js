@@ -37,3 +37,18 @@ export const blankDoc = () => ({
   heavy: { rows: [], reviews: rv2() },
   sfac: { fromD: "", fromT: "", toD: "", toT: "", place: "", facility: "", measure: "", work: "", company: "", companyBy: "", restoreBy: "", checkBy: "", reviews: rv2() },
 });
+
+/* ===== 위험성평가 공통 (ra/ 와 ptw/ 가 같이 씀) ===== */
+// 현대건설 표준 위험성공종 (작업공종)
+export const STD_WT1 = ["철거공사", "공통사항", "가설공사", "공통공사", "토목공사", "토공사", "골조공사", "철골공사", "마감공사", "전기통신공사", "기계공사", "배관공사", "설비공사", "항만공사", "해상공사", "하천공사", "준설 및 매립 공사", "보ㆍ댐공사", "수직구공사", "터널공사", "조경공사", "맨홀및관부설(우오수)공사", "도로 및 포장공사", "상하수도공사", "전력공사", "교량 하부공사", "교량 상부공사", "교량 부대공사", "(토목)건축공사", "(건축)토목공사", "부대공사", "가시설공사", "타워크레인 설치ㆍ인상ㆍ해체", "건설용 리프트 설치ㆍ인상ㆍ해체", "이동식 크레인 설치ㆍ해체", "항타기 설치ㆍ해체", "기타 공종", "철도공사", "갠트리크레인 설치 및 해체", "도로 및 포장공"];
+export const DISASTER = ["추락", "낙하/비래", "협착", "충돌", "붕괴/도괴", "전도(주체: 사람)", "전도(주체: 장비, 가시설 등)", "감전", "화재/폭발", "절단/베임/찔림", "유해물질접촉", "업무상질병", "무리한동작", "교통사고", "기타"];
+export const RA_SRC = ["최초", "월간", "수시", "PTW"];
+// 같은 작업활동인지 (띄어쓰기 무시)
+export const nk = s => String(s ?? "").replace(/\s+/g, "");
+export const actKey = (wt2, wt3) => nk(wt2) + "|" + nk(wt3);
+// 같은 위험요인인지 (세부공종·작업활동·위험요인 글자 비교)
+export const riskKey = r => [r.wt2, r.wt3, r.factor].map(nk).join("|");
+// 허가기간이 걸친 달들 ("2026-10", "2026-11")
+export const monthsOf = (start, end) => { const out = []; if (!start) return out; let y = +start.slice(0, 4), m = +start.slice(5, 7); const ey = +(end || start).slice(0, 4), em = +(end || start).slice(5, 7); while (y < ey || (y === ey && m <= em)) { out.push(`${y}-${String(m).padStart(2, "0")}`); if (++m > 12) { m = 1; y++; } } return out; };
+// 위험성평가 공종 트리 [{wt1, items:[{wt2, acts:[]}]}] 에서 세부공종의 작업공종 찾기
+export const wt1Of = (tree, wt2) => (tree || []).find(g => g.items.some(i => nk(i.wt2) === nk(wt2)))?.wt1 || "";

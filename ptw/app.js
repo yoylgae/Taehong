@@ -1,7 +1,7 @@
 // 작업허가서(PTW) — 작업허가서 · 화학물질 사용계획서 · 화기작업 계획서 · 중량물 취급계획서 · 안전시설물 임시 해체/복구 계획서
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 import { SUPABASE_URL, SUPABASE_KEY } from "../config.js";
-import { PPE, FIRE_CHECKS, grade, gradeCls, blankDoc, TABS } from "./ptw-data.js";
+import { PPE, FIRE_CHECKS, grade, gradeCls, blankDoc, TABS, nk, actKey, riskKey, monthsOf, wt1Of } from "./ptw-data.js";
 import { printPTW } from "./print.js";
 
 const $ = (s, r = document) => r.querySelector(s);
@@ -15,7 +15,7 @@ const clone = o => JSON.parse(JSON.stringify(o ?? null));
 const STATUS = ["작성중", "상신", "결재완료", "반려"];
 
 let sb;
-const S = { docs: [], cur: null, tab: "ptw" };
+const S = { docs: [], ra: [], cur: null, tab: "ptw" };
 const cur = () => S.docs.find(x => x.id === S.cur);
 const D = () => cur()?.data;
 
@@ -27,8 +27,12 @@ async function connect() {
 
 /* ================= 불러오기 · 저장 ================= */
 async function loadAll() {
-  const { data, error } = await sb.from("ptw_docs").select("*").order("start_date", { ascending: false }).order("id", { ascending: false });
+  const [{ data, error }, ra] = await Promise.all([
+    sb.from("ptw_docs").select("*").order("start_date", { ascending: false }).order("id", { ascending: false }),
+    sb.from("ra_months").select("id,ym,status,data").order("ym", { ascending: false }),
+  ]);
   if (error) throw error;
+  S.ra = ra.data || [];
   S.docs = (data || []).map(x => ({ ...x, data: fixDoc(x.data) }));
   fillLists();
 }
@@ -48,6 +52,7 @@ function fillLists() {
     for (const r of d.risks || []) { r.type && sets.type.add(r.type); r.wt3 && sets.wt3.add(r.wt3); }
     for (const k of Object.keys(d.sign || {})) d.sign[k] && sets.names.add(d.sign[k]);
   }
+  for (const m of S.ra) for (const g of m.data.tree || []) { sets.wt1.add(g.wt1); for (const it of g.items) { sets.wt2.add(it.wt2); it.acts.forEach(a => sets.wt3.add(a)); } }
   for (const [k, s] of Object.entries(sets)) $("#dl-" + k).innerHTML = [...s].sort().map(v => `<option value="${esc(v)}">`).join("");
 }
 let saveT = null, pending = new Set();
@@ -163,7 +168,9 @@ function refresh() {
 /* ---------- 작업허가서 ---------- */
 const days7 = d => Array.from({ length: 7 }, (_, i) => d.start ? addDay(d.start, i) : "");
 function rPtw() {
-  const d = D(), dd = days7(d);
+  const d = D(), dd = days7(d), rc = new Map();
+  for (const r of d.risks || []) { const k = actKey(r.wt2, r.wt3); rc.set(k, (rc.get(k) || 0) + 1); }
+  const noRisk = (d.perm || []).filter(p => p.wt3 && !rc.get(actKey(p.wt2, p.wt3)));
   return `
   <div class="card"><h3>기본 정보</h3><div class="row-g">
     <label class="fld">업체명${inp("company")}</label>
@@ -186,10 +193,11 @@ function rPtw() {
     <div class="acts"><button type="button" class="btn sm ghost" id="all-days">모든 공종 7일 전부 체크</button></div></div>
 
   <div class="card"><h3>허가 작업 <small>세부공종별 작업활동과 장비</small><span class="grow"></span>
-      <button type="button" class="btn sm" id="from-ewp" title="허가기간에 작업하는 건설장비 작업계획서의 장비를 가져옵니다">🏗 작업계획서 장비 가져오기</button><button type="button" class="btn sm" data-add="perm">+ 작업 추가</button></h3>
-    <div style="overflow:auto"><table class="tb"><thead><tr><th></th><th>세부공종</th><th>작업활동</th><th>장비 종류</th><th>종류(기타)</th><th>규격</th><th>규격(기타)</th><th>대수</th><th></th></tr></thead><tbody>
+      <button type="button" class="btn sm" id="pick-act" title="월간 위험성평가에 세팅한 공종(작업공종-세부공종-작업활동)에서 골라 넣기">📚 위험성평가 공종에서 고르기</button><button type="button" class="btn sm" id="from-ewp" title="허가기간에 작업하는 건설장비 작업계획서의 장비를 가져옵니다">🏗 작업계획서 장비 가져오기</button><button type="button" class="btn sm" data-add="perm">+ 작업 추가</button></h3>
+    ${noRisk.length ? `<div class="warn">위험성평가가 없는 작업활동 ${noRisk.length}개: ${noRisk.map(p => esc(p.wt3)).join(", ")} — 아래 '위험성평가에서 가져오기'로 넣으세요.</div>` : ""}
+    <div style="overflow:auto"><table class="tb"><thead><tr><th></th><th>세부공종</th><th>작업활동</th><th>장비 종류</th><th>종류(기타)</th><th>규격</th><th>규격(기타)</th><th>대수</th><th title="이 허가서 위험성평가에 있는 이 작업활동의 위험요인 수">위험<br>요인</th><th></th></tr></thead><tbody>
     ${(d.perm || []).map((p, i) => `<tr><td class="n">${i + 1}</td><td>${inp(`perm.${i}.wt2`, { list: "dl-wt2", cls: "l" })}</td><td>${inp(`perm.${i}.wt3`, { list: "dl-wt3", cls: "l" })}</td><td>${inp(`perm.${i}.eq`, { list: "dl-eq" })}</td><td>${inp(`perm.${i}.eqEtc`)}</td>
-      <td style="width:100px">${inp(`perm.${i}.size`, { list: "dl-size" })}</td><td style="width:90px">${inp(`perm.${i}.sizeEtc`)}</td><td style="width:64px">${inp(`perm.${i}.cnt`, { num: 1 })}</td>${del("perm", i)}</tr>`).join("")}
+      <td style="width:100px">${inp(`perm.${i}.size`, { list: "dl-size" })}</td><td style="width:90px">${inp(`perm.${i}.sizeEtc`)}</td><td style="width:64px">${inp(`perm.${i}.cnt`, { num: 1 })}</td><td style="width:46px">${p.wt3 ? (rc.get(actKey(p.wt2, p.wt3)) ? `<b>${rc.get(actKey(p.wt2, p.wt3))}</b>` : `<span class="grade hi">0</span>`) : ""}</td>${del("perm", i)}</tr>`).join("")}
     </tbody></table></div></div>
 
   <div class="card"><h3>작업인원 · 보호구</h3>
@@ -197,8 +205,8 @@ function rPtw() {
     <div class="ppe" style="margin-top:12px">${PPE.map(n => `<label><input type="checkbox" data-ppe="${esc(n)}" ${(d.ppe || []).includes(n) ? "checked" : ""}>${esc(n)}</label>`).join("")}</div></div>
 
   <div class="card"><h3>작업 위험성 평가 <small id="risk-n"></small><span class="grow"></span>
-      <button type="button" class="btn sm" id="pick-risk" title="이전에 쓴 위험성평가에서 골라 넣기">📚 이전 위험성평가에서 가져오기</button><button type="button" class="btn sm" data-add="risks">+ 위험요인 추가</button></h3>
-    <div style="overflow:auto"><table class="tb wrap"><thead><tr><th>No.</th><th>구분</th><th>세부공종</th><th>작업활동</th><th>위험요인</th><th>재해유형</th><th>발생<br>빈도</th><th>위험<br>강도</th><th>평가<br>등급</th><th>위험저감대책</th><th>재평가<br>등급</th><th></th></tr></thead><tbody>
+      <button type="button" class="btn sm" id="to-ra" title="이 허가서의 현장입력 위험요인·작업활동을 월간 위험성평가에 반영하는 화면 열기">↗ 월간 위험성평가에 반영</button><button type="button" class="btn sm primary" id="pick-risk" title="월간 위험성평가·다른 작업허가서에서 골라 넣기">📚 위험성평가에서 가져오기</button><button type="button" class="btn sm" data-add="risks">+ 위험요인 추가</button></h3>
+    <div style="overflow:auto"><table class="tb tw"><thead><tr><th>No.</th><th>구분</th><th>세부공종</th><th>작업활동</th><th>위험요인</th><th>재해유형</th><th>발생<br>빈도</th><th>위험<br>강도</th><th>평가<br>등급</th><th>위험저감대책</th><th>재평가<br>등급</th><th></th></tr></thead><tbody>
     ${(d.risks || []).map((r, i) => `<tr><td class="n">${i + 1}</td><td style="width:84px">${inp(`risks.${i}.src`, { sel: ["PTW", "현장입력"] })}</td>
       <td style="width:110px">${inp(`risks.${i}.wt2`, { list: "dl-wt2", ta: 1 })}</td><td style="width:130px">${inp(`risks.${i}.wt3`, { list: "dl-wt3", ta: 1 })}</td>
       <td style="min-width:200px">${inp(`risks.${i}.factor`, { ta: 1, rows: 3 })}</td><td style="width:96px">${inp(`risks.${i}.type`, { list: "dl-type" })}</td>
@@ -314,6 +322,8 @@ $("#main").addEventListener("click", async e => {
   const m = e.target.closest("[data-mv]"); if (m) { const list = getP(d, m.dataset.mv), i = +m.dataset.i; if (i > 0) { [list[i - 1], list[i]] = [list[i], list[i - 1]]; touch(); drawTabKeepScroll(); } return; }
   if (e.target.closest("#all-days")) { const on = !(d.gongjong || []).every(g => g.days.every(Boolean)); d.gongjong.forEach(g => g.days = g.days.map(() => on)); touch(); drawTabKeepScroll(); return; }
   if (e.target.closest("#pick-risk")) return pickRisk();
+  if (e.target.closest("#pick-act")) return pickAct();
+  if (e.target.closest("#to-ra")) { await flush(); const ym = (d.start || "").slice(0, 7); if (!S.ra.some(r => r.ym === ym)) return toast(`${ym} 월간 위험성평가가 없습니다. 위험성평가 메뉴에서 먼저 만드세요.`, 4000); const h = `#ym=${ym}`; if (parent !== window) parent.postMessage({ pms: "open", id: "ra", hash: h }, location.origin); else location.href = `../ra/${h}`; return; }
   if (e.target.closest("#from-ewp")) return fromEwp();
   if (e.target.closest("#heavy-ewp")) return heavyEwp();
   if (e.target.closest("#copy")) { await flush(); return newDoc(S.cur); }
@@ -324,26 +334,64 @@ $("#main").addEventListener("click", async e => {
   }
 });
 
-/* ---------- 이전 위험성평가에서 가져오기 ---------- */
+/* ---------- 위험성평가에서 가져오기 (월간 위험성평가 + 다른 허가서) ---------- */
+const raOf = d => S.ra.filter(r => monthsOf(d.start, d.end).includes(r.ym));
 function pickRisk() {
-  const d = D(), key = r => [r.wt2, r.wt3, r.factor].map(s => String(s || "").replace(/\s+/g, "")).join("|");
-  const have = new Set((d.risks || []).map(key)), seen = new Map();
-  for (const x of S.docs) if (x.id !== S.cur) for (const r of x.data.risks || []) { const k = key(r); if (!have.has(k) && !seen.has(k) && r.factor) seen.set(k, { ...r, from: x.data.start }); }
-  const all = [...seen.values()];
+  const d = D(), have = new Set((d.risks || []).map(riskKey)), mine = new Set((d.perm || []).filter(p => p.wt3).map(p => actKey(p.wt2, p.wt3)));
+  const all = [], seen = new Set();
+  const push = (r, from, kind) => { const k = riskKey(r); if (!r.factor || have.has(k) || seen.has(k)) return; seen.add(k); all.push({ ...r, from, kind, mine: mine.has(actKey(r.wt2, r.wt3)) }); };
+  for (const m of raOf(d)) for (const r of m.data.rows || []) push(r, `${+m.ym.slice(5)}월 위험성평가`, "ra");
+  for (const x of S.docs) if (x.id !== S.cur) for (const r of x.data.risks || []) push(r, `${x.data.start?.slice(5)}~ 허가서`, "ptw");
+  all.sort((a, b) => (b.mine - a.mine) || (a.kind === "ra" ? -1 : 1) - (b.kind === "ra" ? -1 : 1));
+  const months = raOf(d).map(m => +m.ym.slice(5) + "월").join("·");
   const f = $("#dlg-f"), dlg = $("#dlg");
-  f.innerHTML = `<h3>이전 위험성평가에서 가져오기</h3>
-    ${all.length ? `<div style="display:flex;gap:8px;margin-bottom:8px"><input id="rq" placeholder="세부공종·작업활동·위험요인 검색" style="flex:1"><button type="button" class="btn sm" id="r-all">보이는 것 모두 선택</button></div>
-    <div class="pick">${all.map((r, i) => { const g = grade(r.freq, r.sev); return `<label data-q="${esc([r.wt2, r.wt3, r.factor, r.type].join(" "))}"><input type="checkbox" value="${i}">
-      <span class="gr"><span class="grade ${gradeCls(g)}">${g}</span></span><span><b>${esc(r.wt2)} › ${esc(r.wt3)}</b> · ${esc(r.type)}<br>${esc(r.factor)}<br><small>대책: ${esc(r.measure)}</small></span></label>`; }).join("")}</div>`
-    : `<p class="muted">다른 허가서에 이 허가서에 없는 위험성평가가 없습니다.</p>`}
+  f.innerHTML = `<h3>위험성평가에서 가져오기</h3>
+    <p class="help" style="margin:0 0 8px">${months ? `<b>${months} 월간 위험성평가</b>와 다른 작업허가서의 위험요인입니다.` : "허가기간에 해당하는 월간 위험성평가가 없어 다른 작업허가서의 위험요인만 보입니다."} 이미 넣은 것은 빠져 있습니다.</p>
+    ${all.length ? `<div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;align-items:center"><input id="rq" placeholder="세부공종·작업활동·위험요인 검색" style="flex:1;min-width:200px">
+      <label class="chk"><input type="checkbox" id="r-mine" ${mine.size ? "checked" : ""}> 이 허가서 작업활동만</label><button type="button" class="btn sm" id="r-all">보이는 것 모두 선택</button></div>
+    <div class="pick">${all.map((r, i) => { const g = grade(r.freq, r.sev); return `<label data-q="${esc([r.wt2, r.wt3, r.factor, r.type].join(" "))}" data-mine="${r.mine ? 1 : 0}"><input type="checkbox" value="${i}">
+      <span class="gr"><span class="grade ${gradeCls(g)}">${g}</span></span><span><b>${esc(r.wt2)} › ${esc(r.wt3)}</b> · ${esc(r.type)} <small>(${esc(r.from)})</small><br>${esc(r.factor)}<br><small>대책: ${esc(r.measure)}</small></span></label>`; }).join("")}</div>`
+    : `<p class="muted">가져올 새 위험요인이 없습니다.</p>`}
     <div class="dlg-btns"><button value="" class="btn ghost">닫기</button>${all.length ? `<button value="ok" class="btn primary">선택한 항목 넣기</button>` : ""}</div>`;
-  $("#rq")?.addEventListener("input", e => { const q = e.target.value.trim(); $$(".pick label", f).forEach(l => l.hidden = q && !l.dataset.q.includes(q)); });
+  const filt = () => { const q = ($("#rq")?.value || "").trim(), m = $("#r-mine")?.checked; $$(".pick label", f).forEach(l => l.hidden = (q && !l.dataset.q.includes(q)) || (m && l.dataset.mine !== "1")); };
+  $("#rq")?.addEventListener("input", filt); $("#r-mine")?.addEventListener("change", filt); filt();
   $("#r-all")?.addEventListener("click", () => $$(".pick label:not([hidden]) input", f).forEach(c => c.checked = true));
   dlg.onclose = () => {
     if (dlg.returnValue !== "ok") return;
     const sel = $$(".pick input:checked", f).map(c => all[+c.value]); if (!sel.length) return;
-    for (const r of sel) { const { from, ...rest } = r; d.risks.push(clone(rest)); }
+    for (const r of sel) d.risks.push({ src: "PTW", wt2: r.wt2, wt3: r.wt3, factor: r.factor, type: r.type, freq: r.freq, sev: r.sev, measure: r.measure, re: r.re || "하(F)" });
     touch(); drawTabKeepScroll(); toast(`위험성평가 ${sel.length}건을 넣었습니다.`);
+  };
+  dlg.returnValue = ""; dlg.showModal();
+}
+/* ---------- 위험성평가 공종(작업공종-세부공종-작업활동)에서 허가 작업 고르기 ---------- */
+function pickAct() {
+  const d = D(), ras = raOf(d);
+  if (!ras.length) return toast(`${monthsOf(d.start, d.end).join(", ")} 월간 위험성평가가 없습니다. 위험성평가 메뉴에서 먼저 공종을 세팅하세요.`, 4500);
+  const tree = [], cnt = new Map();
+  for (const m of ras) {
+    for (const g of m.data.tree || []) { let t = tree.find(x => nk(x.wt1) === nk(g.wt1)); if (!t) tree.push(t = { wt1: g.wt1, items: [] });
+      for (const it of g.items) { let u = t.items.find(x => nk(x.wt2) === nk(it.wt2)); if (!u) t.items.push(u = { wt2: it.wt2, acts: [] }); for (const a of it.acts) if (!u.acts.some(x => nk(x) === nk(a))) u.acts.push(a); } }
+    for (const r of m.data.rows || []) { const k = actKey(r.wt2, r.wt3); cnt.set(k, (cnt.get(k) || 0) + 1); }
+  }
+  const have = new Set((d.perm || []).map(p => actKey(p.wt2, p.wt3)));
+  const f = $("#dlg-f"), dlg = $("#dlg");
+  f.innerHTML = `<h3>위험성평가 공종에서 허가 작업 고르기</h3><p class="help" style="margin:0 0 8px">${ras.map(m => +m.ym.slice(5) + "월").join("·")} 월간 위험성평가의 공종 세팅입니다. 숫자 = 위험요인 수. 이미 허가 작업에 있는 것은 체크되어 있습니다.</p>
+    <div class="pick">${tree.map((g, gi) => `<div style="padding:8px 10px;background:#f1f5f9;font-weight:800">${esc(g.wt1)}</div>${g.items.map((it, ii) => `<div style="padding:6px 10px 2px;font-weight:700;font-size:12.5px">${esc(it.wt2)}</div>
+      ${it.acts.map((a, ai) => { const k = actKey(it.wt2, a), on = have.has(k); return `<label style="padding-left:22px"><input type="checkbox" data-k="${gi}.${ii}.${ai}" ${on ? "checked disabled" : ""}><span>${esc(a)} <small>위험요인 ${cnt.get(k) || 0}건${on ? " · 이미 있음" : ""}</small></span></label>`; }).join("")}`).join("")}`).join("")}</div>
+    <label class="chk" style="margin-top:10px"><input type="checkbox" id="with-risk" checked> 고른 작업활동의 위험요인도 이 허가서 위험성평가에 넣기</label>
+    <div class="dlg-btns"><button value="" class="btn ghost">닫기</button><button value="ok" class="btn primary">넣기</button></div>`;
+  dlg.onclose = () => {
+    if (dlg.returnValue !== "ok") return;
+    const picks = $$("input[data-k]:checked:not(:disabled)", f).map(c => { const [gi, ii, ai] = c.dataset.k.split(".").map(Number); return { wt1: tree[gi].wt1, wt2: tree[gi].items[ii].wt2, wt3: tree[gi].items[ii].acts[ai] }; });
+    if (!picks.length) return;
+    const withRisk = $("#with-risk").checked, haveR = new Set((d.risks || []).map(riskKey)); let nr = 0;
+    for (const p of picks) {
+      d.perm.push({ wt2: p.wt2, wt3: p.wt3, eq: "", eqEtc: "", size: "", sizeEtc: "", cnt: 0 });
+      if (!d.gongjong.some(g => nk(g.wt2) === nk(p.wt2))) d.gongjong.push({ wt1: p.wt1, wt2: p.wt2, leader: "", cmdr: false, days: [false, false, false, false, false, false, false] });
+      if (withRisk) for (const m of ras) for (const r of m.data.rows || []) if (actKey(r.wt2, r.wt3) === actKey(p.wt2, p.wt3) && !haveR.has(riskKey(r))) { haveR.add(riskKey(r)); d.risks.push({ src: "PTW", wt2: r.wt2, wt3: r.wt3, factor: r.factor, type: r.type, freq: r.freq, sev: r.sev, measure: r.measure, re: r.re || "하(F)" }); nr++; }
+    }
+    touch(); drawTabKeepScroll(); toast(`허가 작업 ${picks.length}개${nr ? `, 위험요인 ${nr}건` : ""}을 넣었습니다.`, 4000);
   };
   dlg.returnValue = ""; dlg.showModal();
 }
@@ -398,8 +446,9 @@ $("#p-all").onclick = () => doPrint(true);
 (async () => {
   try {
     await connect(); await loadAll();
-    const q = new URLSearchParams(location.search).get("id");
-    S.cur = q && S.docs.some(x => x.id === +q) ? +q : S.docs[0]?.id ?? null;
+    const want = () => +new URLSearchParams(location.hash.slice(1) || location.search.slice(1)).get("id") || 0;
+    const q = want(); S.cur = q && S.docs.some(x => x.id === q) ? q : S.docs[0]?.id ?? null;
     drawList(); draw();
+    addEventListener("hashchange", async () => { const id = want(); await flush(); await loadAll(); if (S.docs.some(x => x.id === id)) S.cur = id; S.tab = "ptw"; drawList(); draw(); });
   } catch (e) { console.error(e); $("#main").innerHTML = `<div class="empty"><h2>불러오지 못했습니다</h2><p>${esc(e.message || e)}</p></div>`; }
 })();

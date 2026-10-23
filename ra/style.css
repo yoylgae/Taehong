@@ -1,0 +1,45 @@
+/* 위험성평가 추가 */
+.steps{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
+.steps button{border:1px solid var(--line);background:#fff;border-radius:10px;padding:9px 15px;cursor:pointer;font-weight:700;font-size:13px;color:#374151}
+.steps button.on{background:#2563eb;border-color:#2563eb;color:#fff}
+.steps button small{font-weight:600;opacity:.8;margin-left:4px}
+.sign5{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
+.sign5 label{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:10px;overflow:hidden;font-size:12px;font-weight:700;color:#4b5563;text-align:center}
+.sign5 label span{background:var(--th);padding:4px}
+.sign5 label input{border:0;border-radius:0;text-align:center;padding:6px 4px;font-weight:600;color:var(--ink)}
+.sign5 label input+input{border-top:1px solid var(--line2);font-size:12px;color:var(--muted)}
+.setup{display:grid;grid-template-columns:300px minmax(0,1fr);gap:14px;align-items:start}
+.std{max-height:70vh;overflow:auto}
+.std .it{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;cursor:pointer;font-size:13px}
+.std .it:hover{background:#f6f8fb}
+.std .it.in{background:#fff7e0;font-weight:700}
+.std .it small{margin-left:auto;color:var(--soft);font-size:11px}
+.tree .g1{border:1px solid var(--line);border-radius:12px;margin-bottom:10px;overflow:hidden}
+.tree .g1>header{display:flex;align-items:center;gap:8px;background:#f1f5f9;padding:8px 12px;font-weight:800}
+.tree .g1>header .grow{flex:1}
+.tree .g2{display:grid;grid-template-columns:200px minmax(0,1fr) 30px;gap:8px;padding:8px 12px;border-top:1px solid var(--line2);align-items:start}
+.tree .g2 input.w2{font-weight:700}
+.chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.chip{display:inline-flex;align-items:center;gap:4px;background:#eef2ff;border:1px solid #dbe4ff;border-radius:99px;padding:3px 4px 3px 10px;font-size:12.5px}
+.chip b{font-size:10.5px;color:var(--accent);background:#fff;border-radius:99px;padding:0 6px}
+.chip.ptw{background:#fde7ec;border-color:#f8c9d4}
+.chip button{border:0;background:none;cursor:pointer;color:var(--soft);padding:0 4px;font-size:12px}
+.chips input{width:170px;padding:4px 8px;font-size:12.5px}
+.ra2{display:grid;grid-template-columns:240px minmax(0,1fr);gap:14px;align-items:start}
+.nav2{position:sticky;top:0;max-height:80vh;overflow:auto;font-size:12.5px}
+.nav2 a{display:flex;gap:6px;padding:5px 8px;border-radius:7px;cursor:pointer;color:inherit;text-decoration:none}
+.nav2 a:hover{background:#f6f8fb}.nav2 a.on{background:var(--accent-soft);color:var(--accent);font-weight:700}
+.nav2 a i{font-style:normal;margin-left:auto;color:var(--soft)}
+.nav2 a.z i{color:var(--danger);font-weight:800}
+.nav2 h5{margin:10px 6px 2px;font-size:11.5px;color:var(--muted)}
+.nav2 .w2{padding-left:14px;font-weight:600;color:#374151;margin-top:4px}
+.grp{margin-bottom:12px}
+.grp>h4{display:flex;align-items:center;gap:8px;margin:0;padding:8px 12px;background:#f8fafc;border:1px solid var(--line);border-bottom:0;border-radius:12px 12px 0 0;font-size:13.5px}
+.grp>h4 small{color:var(--muted);font-weight:600}
+.grp>h4 .grow{flex:1}
+.grp>.tbw{border:1px solid var(--line);border-radius:0 0 12px 12px;overflow:auto;background:#fff}
+.grp.orphan>h4{background:#fff7ed}
+.srcb{font-size:11px;font-weight:800}
+.lk td{vertical-align:middle}
+.ok{color:var(--ok);font-weight:800}.no{color:var(--danger);font-weight:800}
+@media (max-width:1000px){.setup,.ra2{grid-template-columns:1fr}.nav2{position:static;max-height:200px}.sign5{grid-template-columns:repeat(2,1fr)}}

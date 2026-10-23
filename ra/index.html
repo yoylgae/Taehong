@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>위험성평가</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<link rel="stylesheet" href="../ptw/style.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <h1>월간 위험성평가</h1>
+  <span class="save" id="save"></span>
+  <span class="grow"></span>
+  <button type="button" class="btn primary" id="print" title="조회 화면과 같은 짜임으로 A4 가로 인쇄">🖨 인쇄</button>
+</header>
+<div class="wrap">
+  <aside class="days" id="list"></aside>
+  <main id="main"><p class="muted pad">불러오는 중…</p></main>
+</div>
+<dialog id="dlg" class="wide"><form method="dialog" id="dlg-f"></form></dialog>
+<datalist id="dl-wt2"></datalist>
+<datalist id="dl-wt3"></datalist>
+<datalist id="dl-type"></datalist>
+<datalist id="dl-names"></datalist>
+<div id="toast" hidden></div>
+<script type="module" src="app.js"></script>
+</body>
+</html>

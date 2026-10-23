@@ -140,7 +140,7 @@ dialog h3{margin:0 0 12px;font-size:17px}
 .sign label{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:10px;overflow:hidden;font-size:12px;font-weight:700;color:#4b5563;text-align:center}
 .sign label span{background:var(--th);padding:4px}
 .sign label input{border:0;border-radius:0;text-align:center;padding:9px 4px;font-weight:600;color:var(--ink)}
-.tb.wrap td{vertical-align:top}
+.tb.tw td{vertical-align:top}
 .tb td textarea.ta{text-align:left;min-height:40px;resize:vertical}
 .tb td select{width:100%;padding:5px 2px}
 .tb td.c{width:40px}
@@ -171,3 +171,9 @@ dialog h3{margin:0 0 12px;font-size:17px}
 .pick label .gr{flex:none}
 dialog.wide{width:min(900px,96vw)}
 .help{font-size:12px;color:var(--soft);margin:6px 0 0}
+.tb.tw td select{min-width:58px}
+.tb.tw td select[data-p$=".src"]{min-width:86px}
+.tb.tw td select[data-p$=".re"]{min-width:80px}
+.tb.tw td input[list="dl-type"]{min-width:112px}
+.tb.tw td textarea[data-p$=".wt2"]{min-width:100px}
+.tb.tw td textarea[data-p$=".wt3"]{min-width:120px}

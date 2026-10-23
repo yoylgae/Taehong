@@ -26,6 +26,7 @@ const MENUS = [
   { name: "안전보건관리", items: [
     { id: "ewp", name: "건설장비 작업계획서", icon: "🏗", url: "ewp/" },
     { id: "ptw", name: "작업허가서(PTW)", icon: "📋", url: "ptw/" },
+    { id: "ra", name: "위험성평가", icon: "⚠", url: "ra/" },
     { id: "safetycost", name: "산업안전보건관리비", icon: "💰", url: "https://safetycost-gdenc.vercel.app/", newWindow: true },
   ] },
   { name: "편의기능", items: [
