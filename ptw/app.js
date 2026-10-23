@@ -323,7 +323,7 @@ $("#main").addEventListener("click", async e => {
   if (e.target.closest("#all-days")) { const on = !(d.gongjong || []).every(g => g.days.every(Boolean)); d.gongjong.forEach(g => g.days = g.days.map(() => on)); touch(); drawTabKeepScroll(); return; }
   if (e.target.closest("#pick-risk")) return pickRisk();
   if (e.target.closest("#pick-act")) return pickAct();
-  if (e.target.closest("#to-ra")) { await flush(); const ym = (d.start || "").slice(0, 7); if (!S.ra.some(r => r.ym === ym)) return toast(`${ym} 월간 위험성평가가 없습니다. 위험성평가 메뉴에서 먼저 만드세요.`, 4000); const h = `#ym=${ym}`; if (parent !== window) parent.postMessage({ pms: "open", id: "ra", hash: h }, location.origin); else location.href = `../ra/${h}`; return; }
+  if (e.target.closest("#to-ra")) { await flush(); const ym = (d.start || "").slice(0, 7); if (!S.ra.some(r => r.ym === ym)) return toast(`${ym} 월간 위험성평가가 없습니다. 위험성평가 메뉴에서 먼저 만드세요.`, 4000); const h = `#ym=${ym}&step=ptw`; if (parent !== window) parent.postMessage({ pms: "open", id: "ra", hash: h }, location.origin); else location.href = `../ra/${h}`; return; }
   if (e.target.closest("#from-ewp")) return fromEwp();
   if (e.target.closest("#heavy-ewp")) return heavyEwp();
   if (e.target.closest("#copy")) { await flush(); return newDoc(S.cur); }

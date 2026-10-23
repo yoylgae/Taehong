@@ -297,8 +297,9 @@ $("#print").onclick = async () => {
 (async () => {
   try {
     await connect(); await loadAll();
-    const want = () => new URLSearchParams(location.hash.slice(1) || location.search.slice(1)).get("ym");
+    const prm = () => new URLSearchParams(location.hash.slice(1) || location.search.slice(1)), want = () => prm().get("ym");
     const q = want(); S.cur = (q && S.months.find(x => x.data.ym === q)?.id) ?? S.months[0]?.id ?? null;
+    if (["setup", "rows", "ptw"].includes(prm().get("step"))) S.step = prm().get("step");
     drawList(); draw();
     addEventListener("hashchange", async () => { const y = want(); await flush(); await loadAll(); const m = S.months.find(x => x.data.ym === y); if (m) { S.cur = m.id; S.step = "ptw"; } drawList(); draw(); });
   } catch (e) { console.error(e); $("#main").innerHTML = `<div class="empty"><h2>불러오지 못했습니다</h2><p>${esc(e.message || e)}</p></div>`; }
